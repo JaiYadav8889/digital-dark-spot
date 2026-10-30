@@ -12,6 +12,7 @@ import {
   Trash2,
   Type,
   Upload,
+  Link2Off,
 } from 'lucide-react'
 import {
   addManualNoteSource,
@@ -203,7 +204,12 @@ export function SourcesPanel({
                           <ExternalLink className="h-3 w-3 shrink-0" />
                           <span className="truncate">{source.url}</span>
                         </a>
-                      ) : null}
+                      ) : (
+                        <span className="flex items-center gap-1 text-[10.5px] text-slatey-400/80">
+                          <Link2Off className="h-3 w-3 shrink-0" />
+                          URL unavailable for verification
+                        </span>
+                      )}
 
                       {(source.status === 'failed' || source.status === 'partial') ? (
                         <button

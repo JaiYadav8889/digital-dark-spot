@@ -94,8 +94,15 @@ export interface Requirement {
   created_at: string
 }
 
-/** Row shape of the v_requirement_status view. */
-export interface RequirementWithStatus extends Requirement {
+/**
+ * Row shape of the v_requirement_status view.
+ *
+ * The view is a projection of `requirements`, so it carries every requirement
+ * column except `engine` and `created_at` (which the view does not select).
+ * Marking them absent here keeps the type honest rather than pretending they
+ * exist at runtime.
+ */
+export interface RequirementWithStatus extends Omit<Requirement, 'engine' | 'created_at'> {
   requirement_id: string
   supports: number
   partial: number

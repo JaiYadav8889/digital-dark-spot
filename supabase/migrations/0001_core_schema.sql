@@ -253,7 +253,9 @@ select
     else 'not_found'
   end as status,
   (agg.conflicts > 0 or agg.partial > 0 or agg.outdated > 0
-    or (agg.supports > 0 and agg.outdated > 0)) as needs_verification
+    or (agg.supports > 0 and agg.outdated > 0)) as needs_verification,
+  -- Alias so clients can treat a status row exactly like a requirement row.
+  agg.requirement_id as id
 from agg;
 
 -- ------------------------------------------------------------------- session rollup

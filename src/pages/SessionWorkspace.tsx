@@ -12,6 +12,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  ShieldAlert,
   Target,
   TriangleAlert,
 } from 'lucide-react'
@@ -32,7 +33,7 @@ import { useAnalysisRunner } from '../hooks/useAnalysisRunner'
 import { useSessionData } from '../hooks/useSessionData'
 import { setFindingStatus, toggleChecklistItem } from '../lib/api'
 import { computeStats } from '../lib/stats'
-import { DISCLAIMERS, RELATION_META, STATUS_META } from '../lib/status'
+import { DEMO_DISCLAIMER, DEMO_ENGINE_NOTE, DISCLAIMERS, RELATION_META, STATUS_META } from '../lib/status'
 import type { EvidenceWithSource, FindingKind, Relation } from '../lib/types'
 import { cn, formatDate, relativeTime } from '../lib/utils'
 
@@ -305,6 +306,21 @@ export default function SessionWorkspace() {
           </span>
         ) : null}
       </div>
+
+      {/* ------------------------------------------------- demonstration notice */}
+      {session.is_demo ? (
+        <section className="flex items-start gap-3 rounded-xl border border-amber-warm/25 bg-amber-warm/[0.06] px-4 py-3">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-warm" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium leading-relaxed text-amber-warm">{DEMO_DISCLAIMER}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-slatey-300">
+              {DEMO_ENGINE_NOTE} Sources marked “URL unavailable” cannot be re-checked here — their
+              claims are shown exactly as recorded, with the limitation stated instead of a link that
+              does not exist.
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       {/* ------------------------------------------------------------- content */}
       {tab === 'overview' && (

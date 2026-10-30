@@ -346,4 +346,17 @@ export const DISCLAIMERS = {
     'Undated information is never labelled outdated on age alone; it is marked as having unknown current validity.',
   coverage:
     'Coverage is importance-weighted and describes only the sources reviewed in this session.',
+  sourceUnavailable:
+    'The original URL for this source is unavailable in the inventory, so it cannot be opened or re-checked for verification.',
 } as const
+
+/**
+ * The demonstration dataset is a curated reading of the Phase 1 research
+ * inventory. It is never presented as live extraction or live verification, and
+ * this exact sentence is displayed wherever the dataset is opened.
+ */
+export const DEMO_DISCLAIMER =
+  'Demonstration dataset based on the Phase 1 research inventory — verify against the current official NSP portal before making application decisions.'
+
+export const DEMO_ENGINE_NOTE =
+  'Curated demonstration data, not a live AI run and not live source extraction.'

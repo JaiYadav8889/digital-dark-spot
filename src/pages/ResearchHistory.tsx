@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUpRight, History, Plus, Search, Trash2, TriangleAlert } from 'lucide-react'
 import { SessionStatusBadge, useShellHeader } from '../components/layout/AppShell'
@@ -34,7 +34,8 @@ export default function ResearchHistory() {
       const q = query.trim().toLowerCase()
       list = list.filter((s) => s.title.toLowerCase().includes(q) || (s.target_cycle ?? '').toLowerCase().includes(q))
     }
-    return list
+    // Demonstration data is kept visually separate from the user's own research.
+    return [...list.filter((s) => !s.is_demo), ...list.filter((s) => s.is_demo)]
   }, [sessions, filter, query])
 
   async function handleDelete(session: SessionSummary) {
@@ -119,8 +120,15 @@ export default function ResearchHistory() {
         />
       ) : (
         <ul className="space-y-2.5">
-          {rows.map((s) => (
-            <li key={s.session_id} className="surface group p-4 transition-colors hover:border-white/[0.14]">
+          {rows.map((s, index) => (
+            <Fragment key={s.session_id}>
+            {s.is_demo && (index === 0 || !rows[index - 1].is_demo) ? (
+              <li className="list-none px-1 pb-1 pt-3 text-[10.5px] uppercase tracking-[0.14em] text-slatey-400">
+                Demonstration {rows.filter((r) => r.is_demo).length === 1 ? 'case' : 'cases'} · curated
+                data, not live extraction
+              </li>
+            ) : null}
+            <li className="surface group p-4 transition-colors hover:border-white/[0.14]">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -172,6 +180,7 @@ export default function ResearchHistory() {
                 </div>
               </div>
             </li>
+            </Fragment>
           ))}
         </ul>
       )}

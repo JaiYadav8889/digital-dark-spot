@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "target_total": 36,
+  "target_real": 20,
+  "target_synthetic": 16,
+  "provenance_note": "The 12 categories below are PROVISIONAL slot definitions agreed while building the harness. They must be reconciled against the Phase 1 research inventory before any case is authored into a slot. Empty slots are marked to_author — no case content has been invented to fill them.",
+  "review_policy": "Every case needs two independent human reviewers who agree on the expected result before it counts as locked. AI may propose candidates; AI output is never accepted as ground truth.",
+  "categories": [
+    { "id": "A", "name": "Absent information", "question": "Required fact is not present in any reviewed source.", "slots": ["A-01", "A-02", "A-03"] },
+    { "id": "B", "name": "Conflicting claims", "question": "Two reviewed claims disagree in a way context does not resolve.", "slots": ["B-01", "B-02", "B-03"] },
+    { "id": "C", "name": "Lapsed authority", "question": "Evidence belongs to an earlier cycle, expired approval or superseded document.", "slots": ["C-01", "C-02", "C-03"] },
+    { "id": "D", "name": "Partial coverage", "question": "Relevant evidence exists but leaves a substantive part unsettled.", "slots": ["D-01", "D-02", "D-03"] },
+    { "id": "E", "name": "Undated information", "question": "Undated material whose current validity is unknowable — must not be called outdated.", "slots": ["E-01", "E-02", "E-03"] },
+    { "id": "F", "name": "Scope and category mismatch", "question": "The claim covers a different group, category or scheme.", "slots": ["F-01", "F-02", "F-03"] },
+    { "id": "G", "name": "Secondary versus authoritative", "question": "A secondary source asserts what only an authority can establish.", "slots": ["G-01", "G-02", "G-03"] },
+    { "id": "H", "name": "Changed amounts or thresholds", "question": "A figure may have been revised since the source was written.", "slots": ["H-01", "H-02", "H-03"] },
+    { "id": "I", "name": "Changed eligibility conditions", "question": "Eligibility criteria may have changed between cycles.", "slots": ["I-01", "I-02", "I-03"] },
+    { "id": "J", "name": "Procedure or channel change", "question": "The route to apply or claim may have moved.", "slots": ["J-01", "J-02", "J-03"] },
+    { "id": "K", "name": "Continuation and validity", "question": "Whether the scheme or rule still exists at all.", "slots": ["K-01", "K-02", "K-03"] },
+    { "id": "L", "name": "No usable evidence", "question": "Extraction failed or returned nothing usable; the correct output is an explicit limitation.", "slots": ["L-01", "L-02", "L-03"] }
+  ],
+  "authored": ["A-01", "B-01", "C-01", "C-02", "D-01", "D-02"]
+}

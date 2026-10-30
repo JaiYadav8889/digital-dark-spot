@@ -9,6 +9,7 @@ import {
   Info,
   Loader2,
   Quote,
+  Link2Off,
 } from 'lucide-react'
 import { signedDocumentUrl } from '../../lib/api'
 import { RELATION_META, SOURCE_TYPE_LABEL, TONE_CLASS } from '../../lib/status'
@@ -205,7 +206,11 @@ export function EvidenceCard({
             >
               <ExternalLink className="h-3 w-3" /> Open source
             </a>
-          ) : null}
+          ) : (
+            <span className="flex items-center gap-1 text-[10.5px] text-slatey-400/80">
+              <Link2Off className="h-3 w-3" /> Source URL unavailable
+            </span>
+          )}
         </div>
 
         {openError ? <p className="mt-1.5 text-[10.5px] text-coral-soft">{openError}</p> : null}

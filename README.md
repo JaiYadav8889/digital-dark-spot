@@ -89,9 +89,10 @@ Supabase Edge Function secrets — see [docs/SETUP.md](docs/SETUP.md).
 ```bash
 npm run typecheck             # tsc -b --noEmit
 npm run build                 # tsc -b && vite build
-node scripts/test-extraction.mjs
-node scripts/test-analysis.mjs
-python3 scripts/test_extraction_service.py
+node scripts/test-extraction.mjs              # 17 assertions on the shipped extractor helpers
+node scripts/test-analysis.mjs                # 28 assertions on the shipped analysis helpers
+python3 scripts/test_extraction_service.py    # 20 assertions over HTTP
+node scripts/benchmark.mjs --self-check       # benchmark harness plumbing (no score)
 ```
 
 ## Documentation
@@ -100,7 +101,12 @@ python3 scripts/test_extraction_service.py
 - [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — tables, views, status derivation.
 - [docs/SETUP.md](docs/SETUP.md) — local setup, Supabase, secrets, Vercel, deployment checklist.
 - [docs/AUDIT.md](docs/AUDIT.md) — integration audit and what was verified end-to-end.
+- `supabase/migrations/` — 0001 core schema + 0002 claims view; both applied to the live project.
 - [docs/DEMO.md](docs/DEMO.md) — the seeded demo case and a suggested demo script.
+- [docs/REPORT.md](docs/REPORT.md) — factual delivery report: what is tested, partially tested,
+  blocked and missing, with exact remaining manual steps.
+- [benchmark/README.md](benchmark/README.md) — benchmark frame (36 slots), 6 authored cases, and the
+  runner. **No accuracy is claimed** — cases are awaiting two independent human reviewers.
 
 ## Honest limits
 
