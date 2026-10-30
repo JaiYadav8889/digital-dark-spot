@@ -100,3 +100,8 @@ is active.
 4. No authentication gate: sessions without an owner are readable with the anon key. Acceptable for
    a synthetic demo dataset; a one-line change (`owner_id` on insert) scopes it once Auth is enabled.
 5. Email delivery for password reset is limited by Supabase's default SMTP.
+6. The deployed `extract-source` is **version 1**, created before the paragraph-chunking fix found
+   later in the session. Functionally identical for extraction, but paragraph boundaries are packed
+   less faithfully. Redeploy to sync the repo and the runtime:
+   `supabase functions deploy extract-source --project-ref aktubbwkbkekijuxjbwu`. `analyse` and
+   `system-status` match the repository sources.
