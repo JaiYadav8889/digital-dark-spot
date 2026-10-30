@@ -12,10 +12,10 @@ every claim is traceable to an excerpt. It is labelled **Curated demo** in the U
 |---|---|
 | Sources | 8 (2 official PDFs, 3 government pages, 1 parliamentary record, 2 secondary guides) |
 | Requirements | 13 — 8 found, 2 partially supported, 1 conflicting, 2 potentially outdated, **1 not found** |
-| Evidence excerpts | 18, of which 17 link to requirements |
+| Evidence excerpts | 17, all linking to at least one requirement |
 | Evidence links | 20 (SUPPORTS / PARTIAL / CONFLICTS / OUTDATED) |
 | Findings | 11 — 4 gaps, 2 conflicts, 2 outdated, 2 open questions, 1 context note |
-| Checklist items | 11 (3 completed) |
+| Checklist items | 11 (2 completed, 9 open) |
 | Job rows | 5, one per stage, all `succeeded` |
 
 What makes it a good Information Completeness Analysis story:
@@ -46,7 +46,7 @@ What makes it a good Information Completeness Analysis story:
    dates might legitimately differ, and says what to verify. Filter to *Potential gaps* for R13.
 6. **Sources tab** — show extraction states, the snippet-only page marked partially extracted, and
    that no page number is invented for it.
-7. **Checklist** — 8 of 11 open, prioritised high/medium/low, each tied to a requirement and a named
+7. **Checklist** — 9 of 11 open, prioritised high/medium/low, each tied to a requirement and a named
    authority. Tick one and watch the progress count move.
 8. **Run a live session** — create a new research session with two URLs, press **Run analysis**, and
    show the pipeline steps and job messages. Be explicit about which engine ran (Gemini vs the

@@ -104,7 +104,7 @@ psql "$SUPABASE_DB_URL" -f supabase/seed/csss_demo.sql
 ```
 
 The file is idempotent per session id and matches the live dataset: 8 sources, 13 requirements,
-11 findings, 11 checklist items, 18 evidence items, 20 evidence links, 5 job rows.
+11 findings, 11 checklist items, 17 evidence items, 20 evidence links, 5 job rows.
 
 ## 7. Tests
 
