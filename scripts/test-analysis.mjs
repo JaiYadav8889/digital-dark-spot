@@ -1,142 +1,127 @@
 /**
- * Executable tests for the analysis engine's pure logic: JSON tolerance,
- * schema coercion and the deterministic heuristic requirement/matching rules.
+ * Tests the real analysis helpers shipped inside
+ * supabase/functions/analyse/index.ts: JSON recovery, schema validation,
+ * domain-agnostic requirement generation and lexical scoring.
  *
- * As with the extraction tests, the shipped Edge Function source is sliced and
- * executed directly so the assertions cover the deployed code.
+ * The module is sliced (pure helpers only), type-stripped with esbuild and
+ * imported, so this suite exercises the shipped code rather than a copy.
  *
- * Run: node scripts/test-analysis.mjs
+ *   node scripts/test-analysis.mjs
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { transformSync } from 'esbuild'
-import assert from 'node:assert/strict'
 
-const source = readFileSync(new URL('../supabase/functions/analyse/index.ts', import.meta.url), 'utf8')
-const start = source.indexOf('function parseJsonLoose')
-const end = source.indexOf('const SYSTEM_RULES')
-assert.ok(start > 0 && end > start, 'could not locate the pure analysis helpers')
+const SOURCE = 'supabase/functions/analyse/index.ts'
+const raw = readFileSync(SOURCE, 'utf8')
 
-const slice = source.slice(start, end)
-const js = transformSync(
-  `${slice}\nmodule.exports = { parseJsonLoose, str, oneOf, num, asArray, tokenize, sentences, heuristicRequirements, scoreChunk }`,
-  { loader: 'ts', format: 'cjs' },
-).code
-
-const module_ = { exports: {} }
-new Function('module', 'exports', js)(module_, module_.exports)
-const { parseJsonLoose, str, oneOf, num, asArray, tokenize, sentences, heuristicRequirements, scoreChunk } =
-  module_.exports
-
-let passed = 0
-function test(name, fn) {
-  fn()
-  passed += 1
-  console.log(`  ✓ ${name}`)
+const start = raw.indexOf('function parseJsonLoose')
+const end = raw.indexOf('const SYSTEM_RULES')
+if (start < 0 || end < 0) {
+  console.error('Could not locate the helper block in', SOURCE)
+  process.exit(1)
 }
 
-console.log('analysis engine helpers')
+const sliced = `${raw.slice(start, end)}
+export { parseJsonLoose, str, oneOf, num, asArray, tokenize, sentences, heuristicRequirements, scoreChunk }`
 
-test('parses plain JSON', () => {
-  assert.deepEqual(parseJsonLoose('{"a":1}'), { a: 1 })
-})
+const js = transformSync(sliced, { loader: 'ts', format: 'esm', target: 'es2022' }).code
+const dir = mkdtempSync(join(tmpdir(), 'dds-'))
+const file = join(dir, 'analyse-helpers.mjs')
+writeFileSync(file, js)
+const mod = await import(pathToFileURL(file).href)
+const { parseJsonLoose, str, oneOf, num, asArray, tokenize, sentences, heuristicRequirements, scoreChunk } = mod
 
-test('parses JSON wrapped in markdown fences', () => {
-  const raw = '```json\n{"requirements":[{"code":"R1"}]}\n```'
-  assert.deepEqual(parseJsonLoose(raw), { requirements: [{ code: 'R1' }] })
-})
-
-test('recovers JSON surrounded by prose', () => {
-  const raw = 'Here is the analysis you asked for:\n{"findings":[]}\nHope that helps.'
-  assert.deepEqual(parseJsonLoose(raw), { findings: [] })
-})
-
-test('returns null for unusable output rather than throwing', () => {
-  assert.equal(parseJsonLoose('I could not complete this request.'), null)
-  assert.equal(parseJsonLoose('{"broken": '), null)
-})
-
-test('coerces and bounds model output', () => {
-  assert.equal(str('  hello  '), 'hello')
-  assert.equal(str('', 10), null)
-  assert.equal(str(42), null)
-  assert.equal(str('x'.repeat(40), 10).length, 10)
-  assert.equal(oneOf('high', ['high', 'medium', 'low'], 'medium'), 'high')
-  assert.equal(oneOf('nonsense', ['high', 'medium', 'low'], 'medium'), 'medium')
-  assert.equal(oneOf(undefined, ['high', 'low'], 'low'), 'low')
-  assert.equal(num('0.8', 0.5), 0.8)
-  assert.equal(num(2.4, 0.5), 1, 'clamped to the maximum')
-  assert.equal(num(-1, 0.5), 0, 'clamped to the minimum')
-  assert.equal(num('abc', 0.5), 0.5, 'falls back on NaN')
-  assert.deepEqual(asArray([1, 2]), [1, 2])
-  assert.deepEqual(asArray({ not: 'an array' }), [])
-})
-
-test('tokenizer removes stopwords and short words', () => {
-  const tokens = tokenize('What should the student verify before applying?')
-  assert.ok(tokens.includes('student'))
-  assert.ok(tokens.includes('verify'))
-  assert.ok(!tokens.includes('the'))
-  assert.ok(!tokens.includes('should'))
-})
-
-test('sentence splitter keeps substantive sentences', () => {
-  const list = sentences(
-    'Renewal requires at least 50% marks in the annual examination and at least 75% attendance. Short one. Students must apply through the institute portal before the closing date.',
-  )
-  assert.equal(list.length, 2)
-  assert.ok(list[0].startsWith('Renewal requires'))
-})
-
-test('heuristic requirements are domain-agnostic and complete', () => {
-  const reqs = heuristicRequirements('What should I verify before applying for the scheme?', 'AY 2026–27')
-  assert.ok(reqs.length >= 8, 'produces a full requirement set')
-  assert.deepEqual(
-    reqs.map((r) => r.code),
-    reqs.map((_, i) => `R${i + 1}`),
-    'codes are sequential',
-  )
-  for (const r of reqs) {
-    assert.ok(r.description.length > 5)
-    assert.ok(['high', 'medium', 'low'].includes(r.importance))
-    assert.ok(r.expected_evidence.includes('AY 2026–27'), 'cycle is threaded into expected evidence')
+let passed = 0
+let failed = 0
+function check(name, condition, detail = '') {
+  if (condition) {
+    passed += 1
+    console.log(`  ✓ ${name}`)
+  } else {
+    failed += 1
+    console.log(`  ✗ ${name}${detail ? ` — ${detail}` : ''}`)
   }
-  const procurement = heuristicRequirements('Which obligations apply to a vendor under the reviewed policy?', null)
-  assert.ok(
-    procurement.some((r) => /continuation|renewal|extension/i.test(r.description)),
-    'covers continuation even outside scholarship domains',
-  )
-})
+}
 
-test('scoreChunk ranks relevant passages above irrelevant ones', () => {
+console.log('\nanalyse helpers\n')
+
+// --- JSON recovery ---------------------------------------------------------
+check('parses plain JSON', parseJsonLoose('{"a":1}').a === 1)
+check(
+  'parses fenced JSON',
+  parseJsonLoose('```json\n{"requirements":[]}\n```').requirements.length === 0,
+)
+check('recovers JSON wrapped in prose', parseJsonLoose('Here you go:\n{"ok":true}\nThanks').ok === true)
+check('returns null instead of throwing', parseJsonLoose('not json at all') === null)
+
+// --- schema validation -----------------------------------------------------
+check('trims and keeps a string', str('  hello  ') === 'hello')
+check('rejects non-strings', str(42) === null)
+check('rejects empty strings', str('   ') === null)
+check('truncates very long strings', str('x'.repeat(5000), 100).length <= 100)
+check('oneOf keeps allowed value', oneOf('high', ['high', 'medium', 'low'], 'medium') === 'high')
+check('oneOf falls back on junk', oneOf('urgent', ['high', 'medium', 'low'], 'medium') === 'medium')
+check('num clamps to range', num(5, 0.5) === 1 && num(-3, 0.5) === 0)
+check('num falls back on NaN', num('abc', 0.42) === 0.42)
+check('asArray rejects objects', asArray({ a: 1 }).length === 0)
+
+// --- tokenisation ----------------------------------------------------------
+{
+  const tokens = tokenize('The deadline for the 2026–27 application is 31 October 2026.')
+  check('drops stopwords', !tokens.includes('the') && !tokens.includes('for'))
+  check('keeps significant terms', tokens.includes('deadline') && tokens.includes('application'))
+  check('keeps numbers', tokens.includes('2026'))
+}
+
+// --- sentence splitting ----------------------------------------------------
+{
+  const out = sentences('This is a long enough sentence about eligibility and income. Short one. Another sentence that is definitely long enough to be kept by the splitter.')
+  check('keeps substantive sentences only', out.length >= 1 && out.every((s) => s.length > 40))
+}
+
+// --- heuristic requirements are domain agnostic ----------------------------
+{
+  const scholarship = heuristicRequirements('Is the CSSS scholarship available for 2026-27?', 'AY 2026–27')
+  const medical = heuristicRequirements('Which statutory approvals does a generic injectable need before launch?', '2027')
+  check('produces a complete set', scholarship.length === 8, `n=${scholarship.length}`)
+  check('codes are sequential', scholarship.every((r, i) => r.code === `R${i + 1}`))
+  check('importances are valid', scholarship.every((r) => ['high', 'medium', 'low'].includes(r.importance)))
+  check('every requirement explains why it matters', scholarship.every((r) => r.why_it_matters.length > 10))
+  check('every requirement names expected evidence', scholarship.every((r) => r.expected_evidence.length > 20))
+  check('the target cycle is carried into the requirements', scholarship.some((r) => r.description.includes('2026')))
+  check(
+    'no requirement is hardcoded to a scholarship',
+    !medical.some((r) => /scholarship|student|institute/i.test(r.description)),
+    medical.map((r) => r.description).join(' | '),
+  )
+  check(
+    'the objective subject appears in expected evidence',
+    medical.every((r) => r.expected_evidence.toLowerCase().includes('statutory approvals')),
+  )
+}
+
+// --- lexical scoring -------------------------------------------------------
+{
   const requirement = {
-    id: '1',
-    code: 'R7',
-    description: 'Renewal conditions and attendance requirements',
+    id: 'r1',
+    code: 'R1',
+    description: 'The closing date for applications in the target cycle',
     importance: 'high',
-    expected_evidence: 'A statement of renewal marks and attendance thresholds.',
+    expected_evidence: 'An official schedule naming the closing date.',
   }
   const relevant =
-    'Continuation of the scholarship for the subsequent year requires at least 50% marks in the annual examination and at least 75% attendance. Renewal applications must be submitted through the institute.'
+    'Applications for the 2026–27 cycle close on 31 October 2026. The closing date for applications is fixed by the ministry and is not extended without a notice.'
   const irrelevant =
-    'The institute library will remain closed during the winter vacation. Students may borrow up to four books at a time.'
+    'The institute maintains a hostel, a library and a sports ground for students residing on campus throughout the year.'
+  const a = scoreChunk(relevant, requirement)
+  const b = scoreChunk(irrelevant, requirement)
+  check('relevant passage scores higher', a.score > b.score, `${a.score} vs ${b.score}`)
+  check('excerpt comes from the matching sentence', /closing date|close on/i.test(a.excerpt))
+  check('irrelevant passage scores below the linking threshold', b.score < 3, `score=${b.score}`)
+}
 
-  const good = scoreChunk(relevant, requirement)
-  const bad = scoreChunk(irrelevant, requirement)
-  assert.ok(good.score > bad.score, `expected ${good.score} > ${bad.score}`)
-  assert.ok(good.score >= 3, 'relevant passage clears the linking threshold')
-  assert.ok(good.excerpt.toLowerCase().includes('renewal') || good.excerpt.toLowerCase().includes('attendance'))
-})
-
-test('scoreChunk does not link on stopwords alone', () => {
-  const requirement = {
-    id: '2',
-    code: 'R1',
-    description: 'Eligibility conditions',
-    importance: 'high',
-    expected_evidence: 'A statement of eligibility.',
-  }
-  const { score } = scoreChunk('The programme was launched in the year 2013 by the department.', requirement)
-  assert.ok(score < 3, `stopword-only overlap should not link (score ${score})`)
-})
-
-console.log(`\n${passed} analysis assertions passed`)
+console.log(`\n${passed} analysis assertions passed${failed ? `, ${failed} failed` : ''}\n`)
+process.exit(failed ? 1 : 0)

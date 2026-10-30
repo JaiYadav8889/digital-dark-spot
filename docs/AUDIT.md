@@ -31,6 +31,9 @@ Verified by executing SQL against the live database:
   8 found, 2 partial (R4, R8), 1 conflicting (R6), 2 outdated (R10, R12), 1 not found (R13).
 - `v_session_summary` returns 8 sources / 8 processed / 0 failed, 13 requirements,
   4 open gaps, 2 open conflicts, 8 of 11 tasks open.
+- The `v_session_summary` view was extended with `target_cycle` (the dashboard and history pages
+  read it) and both views now have their inherited write privileges revoked for `anon`/`authenticated`
+  — they are read-only projections.
 - The `do $$ … foreach … end loop $$` policy block in `0001_core_schema.sql` was executed against the
   live database and completed without error; the resulting policies are 4 per session-keyed table
   and 3 on `finding_evidence`. (An earlier note claiming this block was invalid was wrong.)
@@ -38,9 +41,12 @@ Verified by executing SQL against the live database:
 **Limitation:** this sandbox's outbound network allows only `github.com`, `codeload.github.com`,
 `api.github.com`, `registry.npmjs.org`, `pypi.org`, `files.pythonhosted.org`. Therefore
 `*.supabase.co` and the Gemini API cannot be reached from a shell here, and no Edge Function could be
-invoked with `curl`. Function behaviour is verified by code inspection + the executable local tests
-(`scripts/test-extraction.mjs`, `scripts/test-analysis.mjs`), which slice the shipped sources and run
-them against stubbed transports.
+invoked with `curl`. Function behaviour is verified by code inspection plus 65 executable assertions in
+`scripts/` that slice the *shipped* function sources, transform them, and exercise the helpers
+(JSON recovery, schema validation, requirement generation, scoring, HTML→text, chunk paging).
+That suite caught one real defect during this session: `stripHtml` emitted single newlines at block
+boundaries, so paragraph-based chunking never saw paragraph breaks. It now emits a blank line and the
+regression is covered by an assertion.
 
 ## 3. Vercel
 
@@ -81,8 +87,8 @@ is active.
 | TypeScript / lint gate | `npx tsc -b --noEmit` clean |
 | Production bundle | `npm run build` succeeds |
 | Dev server + all routes | `npm run dev` serves `/`, `/app/*` with HTTP 200 |
-| Analysis helpers | `node scripts/test-analysis.mjs` |
-| Extraction pipeline | `node scripts/test-extraction.mjs`, `python3 scripts/test_extraction_service.py` |
+| Analysis helpers | `node scripts/test-analysis.mjs` — 28 assertions, all passing |
+| Extraction pipeline | `node scripts/test-extraction.mjs` — 17 assertions; `python3 scripts/test_extraction_service.py` — 20 assertions, all passing |
 | Edge Function invocation from a browser | **not run here** (network egress limitation) — to be confirmed in the preview |
 
 ## 6. Known gaps, stated plainly

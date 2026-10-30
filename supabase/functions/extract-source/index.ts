@@ -62,12 +62,14 @@ function stripHtml(html: string): string {
   const scope = article?.[1] ?? main?.[1] ?? body?.[1] ?? text
 
   let out = scope
-  out = out.replace(/<\/(p|div|section|article|li|h[1-6]|tr|blockquote|br)>/gi, '\n')
+  // Block boundaries become a blank line so that paragraph-aware chunking can
+  // split on them. A <br> is only a line break inside a paragraph.
+  out = out.replace(/<\/(p|div|section|article|li|h[1-6]|tr|blockquote|td|th)>/gi, '\n\n')
   out = out.replace(/<br\s*\/?>/gi, '\n')
   out = out.replace(/<[^>]+>/g, ' ')
   out = decodeEntities(out)
   out = out.replace(/[ \t\u00a0]+/g, ' ')
-  out = out.replace(/\n[ \t]+/g, '\n')
+  out = out.replace(/[ \t]+\n/g, '\n')
   out = out.replace(/\n{3,}/g, '\n\n')
   return out.trim()
 }

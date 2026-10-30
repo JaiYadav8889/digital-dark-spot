@@ -264,6 +264,7 @@ select
   s.status,
   s.is_demo,
   s.analysis_engine,
+  s.target_cycle,
   s.created_at,
   s.updated_at,
   (select count(*) from public.sources src where src.session_id = s.id) as total_sources,
@@ -410,3 +411,8 @@ create policy source_docs_delete on storage.objects
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to anon, authenticated;
 grant select on public.v_requirement_status, public.v_session_summary to anon, authenticated;
+
+-- Views are read-only projections: remove the write privileges that the Supabase
+-- default privileges attach to every new relation in the public schema.
+revoke insert, update, delete, truncate, references, trigger
+  on public.v_requirement_status, public.v_session_summary from anon, authenticated;

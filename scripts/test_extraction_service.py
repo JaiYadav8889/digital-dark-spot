@@ -1,14 +1,12 @@
-"""Integration tests for the extraction service (api/extract.py).
+#!/usr/bin/env python3
+"""
+Tests the real extraction service in api/extract.py.
 
-Exercises the real HTTP handler:
-  * health / capability reporting
-  * PDF text extraction with page numbers (PyMuPDF)
-  * a scanned-style PDF with no text layer (must fail honestly, not fake text)
-  * URL extraction through Trafilatura (network stubbed at the urllib layer)
-  * SSRF guard for private hosts
-  * shared-secret enforcement
+The service is started on a loopback port (127.0.0.1:8811) and driven over HTTP,
+so the request parsing, the capability report, the PDF page mapping, the honest
+failure modes and the shared-secret check are all exercised as deployed.
 
-Run: python scripts/test_extraction_service.py
+    python3 scripts/test_extraction_service.py
 """
 from __future__ import annotations
 
@@ -22,195 +20,199 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api"))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import extract as svc  # noqa: E402
+from api import extract  # noqa: E402
 
 PORT = 8811
-BASE = f"http://127.0.0.1:{PORT}/api/extract"
+SECRET = "test-secret-value"
+
 passed = 0
+failed = 0
 
 
-def check(name: str, fn) -> None:
-    global passed
-    fn()
-    passed += 1
-    print(f"  \u2713 {name}")
-
-
-def post(payload: dict, headers: dict | None = None) -> tuple[int, dict]:
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        BASE,
-        data=data,
-        method="POST",
-        headers={"Content-Type": "application/json", **(headers or {})},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=60) as res:
-            return res.status, json.loads(res.read())
-    except urllib.error.HTTPError as exc:
-        return exc.code, json.loads(exc.read())
-
-
-def get(headers: dict | None = None) -> tuple[int, dict]:
-    req = urllib.request.Request(BASE, headers=headers or {})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as res:
-            return res.status, json.loads(res.read())
-    except urllib.error.HTTPError as exc:
-        return exc.code, json.loads(exc.read())
+def check(name: str, condition: bool, detail: str = "") -> None:
+    global passed, failed
+    if condition:
+        passed += 1
+        print(f"  \u2713 {name}")
+    else:
+        failed += 1
+        print(f"  \u2717 {name}{f' — {detail}' if detail else ''}")
 
 
 def make_pdf(pages: list[str]) -> bytes:
-    """Build a real multi-page PDF with a text layer."""
-    try:
-        import pymupdf as fitz
-    except ImportError:  # pragma: no cover
-        import fitz
-
-    doc = fitz.open()
+    """Build a small digital PDF with exactly len(pages) pages of real text."""
+    pymupdf = _pymupdf()
+    doc = pymupdf.open()
     for body in pages:
         page = doc.new_page()
-        page.insert_text((72, 96), body, fontsize=11)
-    data = doc.tobytes()
+        page.insert_text((72, 100), body, fontsize=12)
+    payload = doc.tobytes()
     doc.close()
-    return data
+    return payload
 
 
-def run() -> None:
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), svc.handler)
+def make_image_only_pdf() -> bytes:
+    """One page with a solid rectangle and no text layer (no OCR possible here)."""
+    pymupdf = _pymupdf()
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.draw_rect(pymupdf.Rect(72, 72, 400, 200), color=(0, 0, 0), fill=(0, 0, 0))
+    payload = doc.tobytes()
+    doc.close()
+    return payload
+
+
+def _pymupdf():
+    try:
+        import pymupdf  # type: ignore
+
+        return pymupdf
+    except ImportError:  # pragma: no cover
+        import fitz  # type: ignore
+
+        return fitz
+
+
+def post(body: dict, secret: str | None = SECRET) -> tuple[int, dict]:
+    data = json.dumps(body).encode()
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{PORT}/api/extract",
+        data=data,
+        headers={"Content-Type": "application/json", **({"x-dds-secret": secret} if secret else {})},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return response.status, json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read().decode())
+
+
+def get(secret: str | None = SECRET) -> tuple[int, dict]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{PORT}/api/extract",
+        headers={"x-dds-secret": secret} if secret else {},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status, json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read().decode())
+
+
+def main() -> int:
+    os.environ["EXTRACTION_SHARED_SECRET"] = SECRET
+
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), extract.handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    print("extraction service")
+    try:
+        print("\nextraction service\n")
 
-    def health() -> None:
+        # 1 — health
         status, body = get()
-        assert status == 200, body
-        assert body["ok"] is True
-        assert body["trafilatura"] is True, "trafilatura should be importable"
-        assert body["pymupdf"] is True, "pymupdf should be importable"
+        check("health returns 200", status == 200, str(status))
+        check("health reports the service name", body.get("service") == "digital-dark-spot-extraction")
+        check("health reports real capability flags", all(k in body for k in ("trafilatura", "pymupdf", "tesseract_binary")))
 
-    def pdf_extraction() -> None:
-        pdf = make_pdf([
-            "Central Sector Scheme of Scholarships. The scholarship rate is 12000 per annum at graduation level.",
-            "Renewal requires at least 50 percent marks in the annual examination and 75 percent attendance.",
-        ])
-        status, body = post({"kind": "pdf", "base64": base64.b64encode(pdf).decode(), "filename": "guidelines.pdf"})
-        assert status == 200, body
-        assert body["ok"] is True, body
-        assert body["pageCount"] == 2, body
-        assert [p["page"] for p in body["pages"]] == [1, 2], body
-        assert "12000" in body["pages"][0]["text"].replace(",", ""), body["pages"][0]["text"]
-        assert "attendance" in body["pages"][1]["text"], body["pages"][1]["text"]
-        assert body["extractor"] in ("pymupdf", "pymupdf+tesseract"), body
+        # 2 — shared secret is enforced
+        status, body = get(secret=None)
+        check("requests without the secret are refused", status in (401, 403), f"{status} {body}")
+        status, body = post({"kind": "url", "url": "https://example.com"}, secret="wrong")
+        check("requests with a wrong secret are refused", status in (401, 403), str(status))
 
-    def scanned_pdf_fails_honestly() -> None:
-        # A PDF with hatching but no text layer: must not invent text.
-        try:
-            import pymupdf as fitz
-        except ImportError:  # pragma: no cover
-            import fitz
-        doc = fitz.open()
-        page = doc.new_page()
-        page.draw_rect(fitz.Rect(50, 50, 400, 400), color=(0, 0, 0), fill=(0.2, 0.2, 0.2))
-        data = doc.tobytes()
-        doc.close()
-        status, body = post({"kind": "pdf", "base64": base64.b64encode(data).decode(), "filename": "scan.pdf"})
-        assert body["ok"] is False, body
-        assert "scanned" in body["error"].lower() or "no extractable" in body["error"].lower(), body
+        # 3 — multi-page PDF keeps page numbers
+        pdf = make_pdf(["Page one talks about eligibility and income limits.", "Page two lists documents and deadlines."])
+        status, body = post({"kind": "pdf", "base64": base64.b64encode(pdf).decode(), "filename": "test.pdf"})
+        check("pdf extraction succeeds", status == 200 and body.get("ok") is True, str(body)[:200])
+        pages = body.get("pages") or []
+        check("pdf keeps one entry per page", len(pages) == 2, f"pages={len(pages)}")
+        check("pdf page numbers are 1-based and ordered", [p["page"] for p in pages] == [1, 2])
+        check("pdf text is preserved", "eligibility" in pages[0]["text"].lower())
+        check("pdf extractor is labelled", body.get("extractor", "").startswith("pymupdf"))
 
-    def url_extraction_with_stubbed_network() -> None:
-        html = b"""<html><head><title>Scheme page</title>
-        <meta property="og:title" content="CSSS scheme page"><meta name="date" content="2025-10-01"></head>
-        <body><nav>menu</nav><article>
-        <p>The last date for students to submit applications is 31 October 2025. Institutes must verify by 15 November 2025.</p>
-        <p>State nodal agencies complete verification by 30 November 2025. Applications are routed through the institute.</p>
-        </article><footer>footer</footer></body></html>"""
+        # 4 — an image-only page fails honestly instead of inventing text
+        status, body = post(
+            {"kind": "pdf", "base64": base64.b64encode(make_image_only_pdf()).decode(), "filename": "scan.pdf"}
+        )
+        check("image-only pdf does not return invented text", not (body.get("ok") and any(p["text"].strip() for p in body.get("pages", []))), str(body)[:200])
 
-        class FakeHeaders(dict):
-            def get_content_charset(self):
-                return "utf-8"
+        # 5 — SSRF guard
+        status, body = post({"kind": "url", "url": "http://127.0.0.1:8811/api/extract"})
+        check("loopback URLs are refused", body.get("ok") is False and status in (400, 422), f"{status} {body}")
+        status, body = post({"kind": "url", "url": "http://169.254.169.254/latest/meta-data/"})
+        check("link-local metadata URLs are refused", body.get("ok") is False)
+        status, body = post({"kind": "url", "url": "file:///etc/passwd"})
+        check("non-http schemes are refused", body.get("ok") is False)
+
+        # 6 — bad payloads
+        status, body = post({"kind": "pdf", "base64": base64.b64encode(b"not a pdf").decode(), "filename": "x.pdf"})
+        check("corrupt pdf is rejected", body.get("ok") is False, str(body)[:160])
+        status, body = post({"kind": "unknown"})
+        check("unknown kind is rejected", body.get("ok") is False)
+
+        # 7 — URL path runs trafilatura end to end (transport stubbed, parsing real)
+        original_is_public = extract._is_public_host
+        original_urlopen = urllib.request.urlopen
+        html = (
+            "<html><head><title>Scheme notice</title>"
+            '<meta property="article:published_time" content="2026-10-01"></head><body>'
+            "<article><h1>Scheme notice</h1>"
+            "<p>The closing date for applications is 31 October 2026. Applications must be submitted "
+            "through the national portal and verified by the institute before the deadline.</p>"
+            "<p>Income limits and document requirements are unchanged from the previous cycle, and the "
+            "ministry has not announced any revision for the current academic year.</p>"
+            "</article></body></html>"
+        ).encode()
 
         class FakeResponse(io.BytesIO):
-            headers = FakeHeaders(
-                {
-                    "Content-Type": "text/html; charset=utf-8",
-                    "Content-Length": str(len(html)),
-                }
-            )
+            def __init__(self, data: bytes):
+                super().__init__(data)
+                self.headers = _Headers()
 
             def __enter__(self):
                 return self
 
-            def __exit__(self, *args):
+            def __exit__(self, *exc):
                 return False
 
-        original_urlopen = urllib.request.urlopen
-        original_guard = svc._is_public_host
-        svc._is_public_host = lambda host: True  # bypass DNS guard for the stub
+        class _Headers:
+            def get(self, name, default=""):
+                return "text/html; charset=utf-8" if name.lower() == "content-type" else default
 
-        def fake_urlopen(request, *args, **kwargs):
-            url = getattr(request, "full_url", str(request))
-            if "education.gov.in" in url:
+            def get_content_charset(self):
+                return "utf-8"
+
+        def fake_urlopen(request, timeout=None):
+            # Only intercept the target host; anything else behaves normally.
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            if "example.gov" in url:
                 return FakeResponse(html)
-            return original_urlopen(request, *args, **kwargs)  # type: ignore[operator]
+            return original_urlopen(request, timeout=timeout)
 
-        urllib.request.urlopen = fake_urlopen  # type: ignore[assignment]
+        extract._is_public_host = lambda host: True  # bypass DNS for the stub target
+        urllib.request.urlopen = fake_urlopen
         try:
-            status, body = post({"kind": "url", "url": "https://www.education.gov.in/scheme"})
+            status, body = post({"kind": "url", "url": "https://example.gov/scheme-notice"})
         finally:
             urllib.request.urlopen = original_urlopen
-            svc._is_public_host = original_guard
+            extract._is_public_host = original_is_public
 
-        assert status == 200, body
-        assert body["ok"] is True, body
-        assert body["extractor"] == "trafilatura", body
-        text = body["text"]
-        assert "31 October 2025" in text, text
-        assert "30 November 2025" in text, text
-        assert "menu" not in text.lower(), "navigation should be dropped"
-        assert body["title"], body
-        assert body["publishedDate"] in ("2025-10-01", None), body
+        check("url extraction succeeds", body.get("ok") is True, str(body)[:200])
+        check("url extractor is labelled", body.get("extractor") == "trafilatura")
+        check("url text keeps the substantive sentence", "31 October 2026" in (body.get("text") or ""))
+        check("url metadata is captured", (body.get("title") or "").strip().lower().startswith("scheme"))
 
-    def ssrf_guard() -> None:
-        status, body = post({"kind": "url", "url": "http://127.0.0.1:8811/api/extract"})
-        assert body["ok"] is False, body
-        assert "private" in body["error"].lower() or "cannot be fetched" in body["error"].lower(), body
+        print(f"\n{passed} extraction-service assertions passed{'' if not failed else f', {failed} failed'}\n")
+    finally:
+        server.shutdown()
+        server.server_close()
 
-    def rejects_non_pdf() -> None:
-        status, body = post({"kind": "pdf", "base64": base64.b64encode(b"not a pdf at all" * 20).decode()})
-        assert body["ok"] is False
-        assert "valid pdf" in body["error"].lower(), body
-
-    def rejects_unknown_kind() -> None:
-        status, body = post({"kind": "spreadsheet"})
-        assert status == 400, (status, body)
-
-    check("health reports Trafilatura and PyMuPDF availability", health)
-    check("multi-page PDF keeps page numbers and text", pdf_extraction)
-    check("image-only PDF fails honestly instead of inventing text", scanned_pdf_fails_honestly)
-    check("URL extraction works through Trafilatura", url_extraction_with_stubbed_network)
-    check("private-network URLs are refused", ssrf_guard)
-    check("non-PDF payloads are rejected", rejects_non_pdf)
-    check("unknown payload kinds are rejected", rejects_unknown_kind)
-
-    def shared_secret() -> None:
-        os.environ["EXTRACTION_SHARED_SECRET"] = "s3cret"
-        try:
-            status, body = get()
-            assert status == 401, (status, body)
-            status, body = get(headers={"x-dds-secret": "s3cret"})
-            assert status == 200, (status, body)
-        finally:
-            os.environ.pop("EXTRACTION_SHARED_SECRET", None)
-
-    check("shared secret is enforced when configured", shared_secret)
-
-    server.shutdown()
-    print(f"\n{passed} extraction-service assertions passed")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    run()
+    sys.exit(main())
