@@ -115,7 +115,14 @@ node scripts/test-extraction.mjs      # extract-source logic (fetch/chunk/page m
 node scripts/test-analysis.mjs        # analyse stage helpers + validation
 python3 scripts/test_extraction_service.py   # extraction service handlers
 python3 scripts/extract_server.py     # local extraction service on :8000
+node scripts/smoke-test.mjs           # end-to-end journey against the live backend
 ```
+
+`smoke-test.mjs` is the authoritative end-to-end check: it writes to the real database and invokes
+the real Edge Functions. It creates a temporary session, ingests a URL, runs requirements → evidence
+→ findings → checklist, verifies the derived statuses and claim projection, toggles a checklist item
+and reads it back. Add `--keep` to inspect the session afterwards.
+
 
 The Python tests bind `127.0.0.1:8811` internally and need `trafilatura`, `pymupdf` and
 `lxml_html_clean` installed (`pip install -r requirements.txt`).

@@ -93,7 +93,12 @@ node scripts/test-extraction.mjs              # 17 assertions on the shipped ext
 node scripts/test-analysis.mjs                # 28 assertions on the shipped analysis helpers
 python3 scripts/test_extraction_service.py    # 20 assertions over HTTP
 node scripts/benchmark.mjs --self-check       # benchmark harness plumbing (no score)
+node scripts/smoke-test.mjs                   # full journey against the real backend
 ```
+
+`scripts/smoke-test.mjs` creates a session, ingests a source, runs every analysis stage, ticks a
+checklist item and reads it back — against the real Supabase project, with no stubs. Run it after
+configuring `.env`; it prints one line per step and exits non-zero on the first real failure.
 
 ## Documentation
 

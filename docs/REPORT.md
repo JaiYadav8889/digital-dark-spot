@@ -28,6 +28,7 @@ Status date: 2026-10-30. Branch `arena/33516a43-digital-dark-spot`.
 | Analysis helpers (real shipped code) | 28 assertions — `node scripts/test-analysis.mjs` |
 | Extraction service handlers | 20 assertions over HTTP — `python3 scripts/test_extraction_service.py` |
 | Benchmark harness | runs; refuses to emit a score without two agreeing human reviews |
+| `scripts/smoke-test.mjs` (full journey) | 15/15 probes pass against a protocol-faithful mock of the Supabase REST + Functions API. **Not yet run against the live backend** — sandbox egress. This is the first command to run in a connected environment. |
 | Edge Function syntax | all three parse under esbuild |
 
 ### Implemented but not fully tested
