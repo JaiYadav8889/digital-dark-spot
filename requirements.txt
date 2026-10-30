@@ -1,0 +1,7 @@
+# Dependencies for the Python extraction service (api/extract.py).
+# Deployed as a Vercel Python serverless function.
+trafilatura>=1.9,<3.0
+lxml_html_clean>=0.1  # required by trafilatura/justext with lxml >= 5
+PyMuPDF>=1.24,<3.0
+Pillow>=10.0
+pytesseract>=0.3.10
