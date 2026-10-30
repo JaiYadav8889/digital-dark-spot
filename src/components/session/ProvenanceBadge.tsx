@@ -42,7 +42,7 @@ export function ProvenanceLegend({ className }: { className?: string }) {
             key={entry}
             className="flex items-start gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2"
           >
-            <span className="mt-[3px] font-mono text-[10px] text-slatey-500">{entry}</span>
+            <span className="mt-[3px] font-mono text-[10px] text-slatey-400/70">{entry}</span>
             <div className="min-w-0">
               <p className="text-[11.5px] font-medium text-slatey-200">{meta.label}</p>
               <p className="mt-0.5 text-[10.5px] leading-relaxed text-slatey-400">{meta.description}</p>

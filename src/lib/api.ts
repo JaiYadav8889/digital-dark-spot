@@ -21,6 +21,7 @@ import type {
   ResearchSession,
   SessionSummary,
   Source,
+  SourceChunk,
   SourceType,
   Importance,
 } from './types'
@@ -143,6 +144,23 @@ export async function listSources(sessionId: string): Promise<Source[]> {
     .order('created_at', { ascending: true })
   if (error) fail('Could not load sources', error)
   return (data ?? []) as Source[]
+}
+
+/**
+ * The stored text of a source, page by page.
+ *
+ * This is the same text the analysis was run on — nothing is re-extracted when
+ * the reader opens it — so what is shown here is what the app actually read.
+ */
+export async function listSourceChunks(sourceId: string): Promise<SourceChunk[]> {
+  assertConfigured()
+  const { data, error } = await supabase
+    .from('source_chunks')
+    .select('*')
+    .eq('source_id', sourceId)
+    .order('chunk_index', { ascending: true })
+  if (error) fail('Could not load the extracted text', error)
+  return (data ?? []) as SourceChunk[]
 }
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024

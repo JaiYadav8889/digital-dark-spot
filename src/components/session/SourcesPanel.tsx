@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  FileSearch,
   FileText,
   Globe,
   Loader2,
@@ -32,6 +33,7 @@ import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Select, Text
 import { Modal, Tooltip } from '../ui/overlay'
 import { useToast } from '../ui/toast'
 import { OriginBadge } from './ProvenanceBadge'
+import { ExtractedTextModal } from './ExtractedTextModal'
 
 const SOURCE_TYPES: SourceType[] = [
   'official_guideline',
@@ -57,6 +59,7 @@ export function SourcesPanel({
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<AddMode>('url')
   const [busyIds, setBusyIds] = useState<Record<string, boolean>>({})
+  const [textSource, setTextSource] = useState<Source | null>(null)
   const toast = useToast()
 
   async function runExtraction(source: Source) {
@@ -188,6 +191,12 @@ export function SourcesPanel({
                     ) : null}
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+                      <button
+                        onClick={() => setTextSource(source)}
+                        className="flex items-center gap-1 text-[10.5px] font-medium text-slatey-200 hover:text-white"
+                      >
+                        <FileSearch className="h-3 w-3" /> Extracted text
+                      </button>
                       {source.kind === 'pdf' && (source.document_path || source.storage_path) ? (
                         <button
                           onClick={() => void openPdf(source)}
@@ -274,6 +283,8 @@ export function SourcesPanel({
           await runExtraction(source)
         }}
       />
+
+      <ExtractedTextModal source={textSource} onClose={() => setTextSource(null)} />
     </>
   )
 }
