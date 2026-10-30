@@ -117,8 +117,17 @@ export async function updateSession(id: string, patch: Partial<ResearchSession>)
 
 export async function deleteSession(id: string) {
   assertConfigured()
-  const { error } = await supabase.from('research_sessions').delete().eq('id', id)
+  // Ask for the deleted rows back: a DELETE that RLS filters out returns zero
+  // rows *without* an error. Without this check the UI removed the session
+  // locally while the row survived and reappeared on reload.
+  const { data, error } = await supabase.from('research_sessions').delete().eq('id', id).select('id')
   if (error) fail('Could not delete the research session', error)
+  if (!data || data.length === 0) {
+    throw new ApiError(
+      'The session was not deleted.',
+      'Row Level Security only permits deleting sessions you own, or sessions created without signing in. Sign in as the owner, or create the session in this browser.',
+    )
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +188,23 @@ export async function addUrlSource(sessionId: string, input: NewUrlSourceInput):
   assertConfigured()
   const clean = input.url.trim()
   const domain = hostnameOf(clean)
+
+  // Duplicate guard. The same URL added twice would produce two sources, two
+  // copies of every excerpt and doubled counts in the evidence map — while
+  // looking like corroboration from two sources.
+  const { data: existing, error: lookupError } = await supabase
+    .from('sources')
+    .select('id,title,url')
+    .eq('session_id', sessionId)
+  if (lookupError) fail('Could not check existing sources', lookupError)
+  const duplicate = (existing ?? []).find((s) => (s.url ?? '').replace(/\/+$/, '') === clean.replace(/\/+$/, ''))
+  if (duplicate) {
+    throw new ApiError(
+      `That URL is already a source in this session (“${duplicate.title}”).`,
+      'Remove the existing source first if you want to re-add it with different metadata.',
+    )
+  }
+
   const { data, error } = await supabase
     .from('sources')
     .insert({

@@ -38,6 +38,11 @@ export interface ResearchSession {
   owner_id: string | null
   is_demo: boolean
   last_analysed_at: string | null
+  /**
+   * Internal analysis bookkeeping (e.g. checklist completion carried across a
+   * rebuild). Never rendered as content; kept typed as an opaque record.
+   */
+  analysis_meta?: Record<string, unknown>
   created_at: string
   updated_at: string
 }

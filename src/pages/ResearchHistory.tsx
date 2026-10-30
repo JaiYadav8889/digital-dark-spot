@@ -4,7 +4,7 @@ import { ArrowUpRight, History, Plus, Search, Trash2, TriangleAlert } from 'luci
 import { SessionStatusBadge, useShellHeader } from '../components/layout/AppShell'
 import { Badge, Button, EmptyState, Input, Segmented, Skeleton } from '../components/ui/primitives'
 import { useToast } from '../components/ui/toast'
-import { deleteSession, listSessionSummaries } from '../lib/api'
+import { ApiError, deleteSession, listSessionSummaries } from '../lib/api'
 import type { SessionSummary } from '../lib/types'
 import { formatDate, pct, relativeTime } from '../lib/utils'
 import { DistributionBar } from './Overview'
@@ -45,9 +45,10 @@ export default function ResearchHistory() {
       setSessions((prev) => prev.filter((s) => s.session_id !== session.session_id))
       toast.success('Session deleted')
     } catch (err) {
+      const hint = err instanceof ApiError ? err.hint : undefined
       toast.error(
         'Could not delete this session',
-        err instanceof Error ? err.message : 'Guest sessions cannot be deleted. Sign in to remove your own sessions.',
+        hint ?? (err instanceof Error ? err.message : 'The session could not be deleted.'),
       )
     }
   }

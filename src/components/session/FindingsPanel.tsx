@@ -282,7 +282,16 @@ function FindingCard({
                   />
                 ))}
               </div>
-            ) : null}
+            ) : (
+              <div className="rounded-lg border border-dashed border-white/[0.12] bg-white/[0.015] px-3 py-2.5">
+                <p className="text-[11px] leading-relaxed text-slatey-400">
+                  <span className="font-medium text-slatey-200">No excerpt is attached to this finding.</span>{' '}
+                  {finding.kind === 'gap'
+                    ? 'That is expected — a gap records the absence of evidence for a requirement. It is not itself evidence, so nothing is quoted. The requirement it belongs to is linked above.'
+                    : 'The analysis recorded this signal without quoting a passage, so it should be treated as a prompt to look at the sources yourself rather than as a supported claim.'}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -197,6 +197,9 @@ export default function SessionWorkspace() {
   if (!session) return null
 
   const busy = runner.running || sessionsIsBusy(sources, jobs)
+  // Sources whose text was never searched. A requirement with no evidence is
+  // NOT the same as a requirement the sources answered — say so explicitly.
+  const unreadSources = sources.filter((s) => s.status !== 'extracted').length
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-4">
@@ -306,6 +309,23 @@ export default function SessionWorkspace() {
           </span>
         ) : null}
       </div>
+
+      {/* ------------------------------------------------------- not assessed */}
+      {!session.is_demo && sources.length > 0 && unreadSources > 0 && requirements.length > 0 ? (
+        <section className="flex items-start gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-slatey-400" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium text-slatey-200">
+              {unreadSources} of {sources.length} sources were not fully read — part of this session is{' '}
+              <span className="text-white">not assessed</span>.
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-slatey-400">
+              Requirements marked “not found” may simply be covered by text that was never extracted. Retry
+              extraction in the Sources tab before treating any of them as a gap.
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       {/* ------------------------------------------------- demonstration notice */}
       {session.is_demo ? (
@@ -534,6 +554,7 @@ export default function SessionWorkspace() {
             requirement={selectedRequirement}
             evidence={evidence}
             findings={findings.filter((f) => f.requirement_id === selectedRequirement.requirement_id)}
+            unreadSources={unreadSources}
           />
         ) : null}
       </Drawer>

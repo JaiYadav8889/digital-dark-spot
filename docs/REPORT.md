@@ -69,6 +69,41 @@ Status date: 2026-10-30. Branch `arena/33516a43-digital-dark-spot`.
 
 ---
 
+## 1b. Audit round 3 — defects found and fixed
+
+Every item below was reproduced first, then fixed, then re-tested. The reproductions and their
+expected output are committed in `supabase/checks/integrity.sql` so they can be re-run at any time.
+
+| # | Defect | How it was reproduced | Fix | Re-test |
+|---|---|---|---|---|
+| 1 | **Deleting a session silently did nothing.** `sessions_delete` required an owner, but every session created without signing in has `owner_id = null`. The delete matched zero rows, returned no error, and the UI removed the row locally — it reappeared on reload. | `set local role anon; with gone as (delete … returning id) select count(*) from gone;` → **0 deleted, 1 row remaining** | Migration 0003 relaxes the policy to `owner_id is null or owner_id = auth.uid()`, matching select/insert/update. `deleteSession()` now requests the deleted rows back and throws if none came back, so a future policy mistake cannot masquerade as success. | Same probe → **1 deleted, 0 remaining**. Cascade verified separately: sources, chunks, requirements and checklist all 0. |
+| 2 | **Re-running the analysis erased checklist progress.** The findings/checklist stages delete and regenerate `checklist_items`, so every ticked verification disappeared without warning. | Simulated a rebuild: ticked item → delete all → regenerate → item returned unticked | Migration 0004 adds two triggers: a `BEFORE DELETE` trigger snapshots completed items into `research_sessions.analysis_meta`, and an `AFTER INSERT` trigger re-ticks a regenerated item whose normalised title matches. Implemented as a trigger so the invariant holds for *any* caller, including the seed script and future stages, with no Edge Function redeploy required. | Item restored as completed with its original timestamp; unticked stayed unticked; a genuinely new item stayed open. |
+| 3 | **Duplicate sources inflated the evidence map.** The same URL could be added repeatedly, producing two sources, duplicated excerpts and counts that looked like corroboration between sources. | Code inspection of `addUrlSource` (no uniqueness check at any layer) | `addUrlSource` compares the normalised URL against the session's existing sources and refuses with a message naming the existing source. | Typecheck + build; behaviour is a pure client-side guard and is covered by the duplicate message path in the add-source modal. |
+| 4 | **"Not found" and "not assessed" were conflated.** A requirement with no evidence was always labelled "Not found in reviewed sources", even when sources had failed to extract — in which case the text was never searched at all. | Code inspection: status derivation only sees evidence links, never source state | The workspace now shows a "not assessed" banner when any source is unread, and the requirement drawer explains that the gap may be an extraction failure rather than an absence. | Typecheck + build; visible on any session with a failed or waiting source. |
+| 5 | **Gap findings appeared to have missing evidence.** A finding with no excerpt rendered an empty area, which reads like a broken feature rather than an honest absence. | SQL: `findings_without_evidence` = 1 (the R13 gap) | The findings panel now states explicitly that a gap quotes nothing *by design*, and that other finding types without a passage are prompts to check the sources rather than supported claims. | Typecheck + build. |
+| 6 | **Seven foreign keys had no leading index**, including `research_sessions.owner_id` (evaluated by RLS on every request) and every cascade path. | Query over `pg_constraint` vs `pg_index` | Migration 0005 adds eight indexes (`if not exists`). | Re-ran the same query: no FK columns without a leading index remain. |
+
+Provenance audit of the demonstration dataset (SQL, all committed in `integrity.sql`):
+
+| Check | Result |
+|---|---|
+| Page numbers attached to a non-PDF source | **0** |
+| Claims flagged `quote_verified` that are not actually inside their chunk | **0** |
+| Evidence rows with no requirement link | **0** |
+| Findings with no requirement | **0** |
+| Findings with no excerpt | 1 — the R13 gap, which is correct and now explained in the UI |
+| Evidence whose source has no URL and no stored file | 17 — expected; these are inventory sources with no published link, and the UI labels each one "URL unavailable for verification" |
+
+Security checks executed:
+
+| Check | Result |
+|---|---|
+| Client bundle contains `GEMINI_API_KEY`, `service_role`, `x-dds-secret` or `EXTRACTION_SHARED_SECRET` | **0 occurrences** |
+| Repository contains a live-looking secret | none — only the words in comments/env names |
+| RLS enabled on all ten tables | **10/10** |
+| Anonymous reader sees a private (owned) session | **0 rows** |
+| Anonymous reader sees the public demo session | **1 row**, with its 13 requirements |
+
 ## 2. Infrastructure facts
 
 | Item | Value |
@@ -79,7 +114,7 @@ Status date: 2026-10-30. Branch `arena/33516a43-digital-dark-spot`.
 | Vercel project | `digital-dark-spot` — `prj_SANq7l0QoDb3IWmSGQjaEgd4eqj2`; env `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` set for production/preview/development |
 | Vercel deployment URL | **none yet** — not verifiable, so not claimed |
 | Supabase project | `aktubbwkbkekijuxjbwu` → `https://aktubbwkbkekijuxjbwu.supabase.co` |
-| Migrations | `supabase/migrations/0001_core_schema.sql` (tables, views, indexes, RLS, storage policies, grants) and `0002_claims_view.sql` — both applied to the live database |
+| Migrations | `0001_core_schema.sql` (tables, views, indexes, RLS, storage policies, grants), `0002_claims_view.sql`, `0003_ownership_and_analysis_meta.sql`, `0004_checklist_completion.sql`, `0005_foreign_key_indexes.sql` — all five applied to the live database |
 | Edge Functions | `analyse`, `extract-source`, `system-status` — ACTIVE v1, `verify_jwt: true` |
 | Storage | bucket `source-documents`, private, 1-hour signed URLs |
 | Secrets present | platform defaults only (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEYS`, `SUPABASE_SECRET_KEYS`, `SUPABASE_DB_URL`, `SUPABASE_JWKS`) |
@@ -128,7 +163,15 @@ journey was driven from this environment. Those are the two checks to repeat fir
    Auth and setting `owner_id` scopes them with no schema change.
 5. Password reset email is limited by Supabase's default SMTP.
 6. The deployed `extract-source` predates the chunking fix (see above) — redeploy to sync.
-7. The coverage figure is importance-weighted evidence coverage of the reviewed sources, with the
+7. **Concurrent analysis runs are not locked server-side.** The client refuses a second run in the
+   same tab, but two tabs pointed at the same session could each invoke `analyse`; the evidence
+   stage deletes and re-inserts a source's evidence, so the outcome is duplicated or partially
+   rewritten rows, recoverable by re-running. A guard belongs in the function (refuse if a
+   `running` job for the same session+stage is younger than ~2 minutes) and requires an Edge
+   Function redeploy, which cannot be verified from this sandbox — so it is documented rather than
+   shipped untested.
+8. The deployed `extract-source` predates the paragraph-chunking fix (see above) — redeploy to sync.
+9. The coverage figure is importance-weighted evidence coverage of the reviewed sources, with the
    formula and weights shown; it is never presented as a completeness percentage of reality.
 
 ---

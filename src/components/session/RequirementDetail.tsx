@@ -33,10 +33,13 @@ export function RequirementDetail({
   requirement,
   evidence,
   findings,
+  unreadSources = 0,
 }: {
   requirement: RequirementWithStatus
   evidence: EvidenceWithSource[]
   findings: Finding[]
+  /** Sources that were never successfully read (waiting, failed or partial). */
+  unreadSources?: number
 }) {
   const meta = STATUS_META[requirement.status]
   const tone = TONE_CLASS[meta.tone]
@@ -150,6 +153,17 @@ export function RequirementDetail({
             Nothing in the reviewed sources addresses this
           </p>
           <p className="mt-1.5 text-[12px] leading-relaxed text-slatey-300">{DISCLAIMERS.notFound}</p>
+          {unreadSources > 0 ? (
+            <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-slatey-400/20 bg-white/[0.02] px-2.5 py-2 text-[11px] leading-relaxed text-slatey-300">
+              <Info className="mt-0.5 h-3 w-3 shrink-0 text-slatey-400" />
+              <span>
+                Partly <span className="font-medium text-slatey-200">not assessed</span>: {unreadSources}{' '}
+                {unreadSources === 1 ? 'source was' : 'sources were'} never successfully read (waiting, failed or
+                only partly extracted). Their content was never searched, so this requirement may still be
+                answered by them. Retry extraction before treating it as a gap.
+              </span>
+            </p>
+          ) : null}
         </div>
       )}
 
