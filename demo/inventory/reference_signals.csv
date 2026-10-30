@@ -1,0 +1,11 @@
+signal_id,signal_type,requirement_id,description,sources_involved,expected_system_output,basis,review_status
+SG01,GAP,R09,The official guidelines give no 2026-27 deadline and defer to NSP,S01,Flag as information gap: deadline missing from reviewed official sources,Read in full,PENDING_HUMAN_REVIEW
+SG02,CONFLICT,R09,Secondary sites give different 2026-27 student deadlines: 30 Sep 2026; 25.10.2026; 31 Oct 2026,cbseguidanceweb; shcollege.ac.in; findmycollege; opportunityinside,Flag genuine conflict among secondary sources and require NSP check,Search results (secondary),PENDING_HUMAN_REVIEW
+SG03,OUTDATED_FOR_CYCLE,R09,education.gov.in page lists 2025-26 closing dates while the target cycle is 2026-27,S02,Mark dates as historical for 2025-26 not as 2026-27,Search snippet,PENDING_HUMAN_REVIEW
+SG04,NEEDS_VERIFICATION,R13,Continuation of the scheme beyond March 2026 not confirmed in any official document found,S01; S03,Flag as uncertain; ask for an official continuation notice,Mirror letter plus guidelines,PENDING_HUMAN_REVIEW
+SG05,SUPERSEDED,R05,2018 and 2019 guidelines show Rs 10000 graduation rate; current guidelines show Rs 12000,2018 guidelines (mirror); S01,Classify older rate as superseded not as conflict,Search snippets plus read guidelines,PENDING_HUMAN_REVIEW
+SG06,PARTIAL,R07,Guidelines name only the income certificate; no full document checklist,S01,Mark as partially supported,Read in full,PENDING_HUMAN_REVIEW
+SG07,NOT_A_CONFLICT,R05,Rs 12000 vs Rs 20000 within the same guidelines: different course level and year,S01,Do not flag; explain by applicant category,Read in full,PENDING_HUMAN_REVIEW
+SG08,NOT_A_CONFLICT,R03,Income certificate required for fresh applicants but not renewals,S01,Do not flag; explain by applicant condition,Read in full,PENDING_HUMAN_REVIEW
+SG09,DUPLICATE,R01,The same guidelines text is hosted on several college and state sites,S01; mirrors,Detect as duplicate content and prefer the official host,Search results,PENDING_HUMAN_REVIEW
+SG10,OVERSTATED_SECONDARY_CLAIM,R02,One secondary site says institutions must be AICTE-recognised while guidelines say AICTE and respective regulatory bodies,learningshala (secondary); S01,Flag secondary claim as narrower than the official text,Search result plus guidelines,PENDING_HUMAN_REVIEW

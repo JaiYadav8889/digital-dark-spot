@@ -1,0 +1,36 @@
+{
+  "session": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "title": "CSSS scholarship — what must be verified for AY 2026–27?",
+    "question": "What should a student verify before relying on the Central Sector Scheme of Scholarships (CSSS) information for AY 2026–27?",
+    "context": "Two official documents were supplied: the MHRD/Department of Higher Education scheme guidelines and the Department of Higher Education CSSS FAQ. The question is not what the scheme says in general, but which details these documents actually establish for AY 2026–27 and which must be confirmed with the ministry, the institute or the state nodal agency before an application is made.",
+    "target_cycle": "AY 2026–27",
+    "domain": "Education · Scholarship"
+  },
+  "sources": [
+    {
+      "file": "public/demo-sources/csss-guidelines-mhrd.pdf",
+      "original_name": "GuidlineMHRDCentralSectorSchiolarship.pdf",
+      "title": "Central Sector Scheme of Scholarship for College and University Students — Scheme Guidelines (MHRD / Department of Higher Education)",
+      "issuer": "Ministry of Human Resource Development, Department of Higher Education (Scholarship Bureau)",
+      "source_type": "official_guideline",
+      "published_date": "2018-08-01",
+      "url": "https://scholarships.gov.in/public/schemeGuidelines/CSSS_GUIDLINES_06022024.pdf",
+      "url_note": "URL recorded in the Phase 1 research inventory for the CSSS guidelines PDF. It was NOT re-fetched during this import; the text below comes from the uploaded file.",
+      "provenance": "Uploaded demonstration document (Phase 1 inventory pack)",
+      "document_path": "/demo-sources/csss-guidelines-mhrd.pdf"
+    },
+    {
+      "file": "public/demo-sources/csss-faq-dohe.pdf",
+      "original_name": "FAQ_DOHE_CSSS.pdf",
+      "title": "PM-USP Central Sector Scheme of Scholarships — Frequently Asked Questions (DOHE, 2025-26)",
+      "issuer": "Department of Higher Education (Scholarship Division), Ministry of Education",
+      "source_type": "government_page",
+      "published_date": "2025-06-18",
+      "url": null,
+      "url_note": "No original URL is recorded in the Phase 1 inventory for this FAQ (the inventory lists the official FAQ URL as unconfirmed). None is invented here; the document is opened from the uploaded copy.",
+      "provenance": "Uploaded demonstration document (Phase 1 inventory pack)",
+      "document_path": "/demo-sources/csss-faq-dohe.pdf"
+    }
+  ]
+}

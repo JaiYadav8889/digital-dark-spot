@@ -1,0 +1,144 @@
+{
+  "generated_at": "2026-10-30T18:03:44.658Z",
+  "requirement_source": "inventory",
+  "engine": "heuristic",
+  "sources": [],
+  "requirements": [
+    {
+      "code": "R01",
+      "description": "Board percentile eligibility",
+      "status": "found"
+    },
+    {
+      "code": "R02",
+      "description": "Course type",
+      "status": "partial"
+    },
+    {
+      "code": "R03",
+      "description": "Family income limit",
+      "status": "partial"
+    },
+    {
+      "code": "R04",
+      "description": "No other scholarship",
+      "status": "not_found"
+    },
+    {
+      "code": "R05",
+      "description": "Scholarship amount",
+      "status": "partial"
+    },
+    {
+      "code": "R06",
+      "description": "Renewal conditions",
+      "status": "partial"
+    },
+    {
+      "code": "R07",
+      "description": "Complete list of required documents",
+      "status": "found"
+    },
+    {
+      "code": "R08",
+      "description": "Application procedure",
+      "status": "found"
+    },
+    {
+      "code": "R09",
+      "description": "Application deadline for 2026-27",
+      "status": "partial"
+    },
+    {
+      "code": "R10",
+      "description": "Reservation and seats",
+      "status": "partial"
+    },
+    {
+      "code": "R11",
+      "description": "Change of institution",
+      "status": "found"
+    },
+    {
+      "code": "R12",
+      "description": "Verification process",
+      "status": "found"
+    },
+    {
+      "code": "R13",
+      "description": "Scheme valid for 2026-27",
+      "status": "outdated"
+    }
+  ],
+  "evidence": [],
+  "findings": [
+    {
+      "kind": "gap",
+      "title": "Not found in reviewed sources: No other scholarship",
+      "links": 0
+    },
+    {
+      "kind": "outdated",
+      "title": "May describe an earlier period: Scheme valid for 2026-27",
+      "links": 1
+    }
+  ],
+  "checklist": [
+    {
+      "title": "Confirm directly: No other scholarship",
+      "priority": "medium",
+      "finding_id": "00000000-0000-4000-8000-030100000001"
+    },
+    {
+      "title": "May describe an earlier period: Scheme valid for 2026-27",
+      "priority": "high",
+      "finding_id": "00000000-0000-4000-8000-030100000002"
+    },
+    {
+      "title": "Verify with the authority: Course type",
+      "priority": "medium",
+      "finding_id": null
+    },
+    {
+      "title": "Verify with the authority: Family income limit",
+      "priority": "high",
+      "finding_id": null
+    },
+    {
+      "title": "Verify with the authority: Scholarship amount",
+      "priority": "medium",
+      "finding_id": null
+    },
+    {
+      "title": "Verify with the authority: Renewal conditions",
+      "priority": "medium",
+      "finding_id": null
+    },
+    {
+      "title": "Verify with the authority: Application deadline for 2026-27",
+      "priority": "high",
+      "finding_id": null
+    },
+    {
+      "title": "Verify with the authority: Reservation and seats",
+      "priority": "medium",
+      "finding_id": null
+    }
+  ],
+  "skipped": [],
+  "totals": {
+    "sources": 2,
+    "chunks": 15,
+    "requirements": 13,
+    "evidence": 12,
+    "links": 30,
+    "findings": 2,
+    "checklist": 8
+  },
+  "status_counts": {
+    "found": 5,
+    "partial": 6,
+    "not_found": 1,
+    "outdated": 1
+  }
+}

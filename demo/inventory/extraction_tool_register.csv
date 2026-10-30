@@ -1,0 +1,12 @@
+tool,purpose,input_types,licence,licence_status,catalyst_fit,suggested_role,checked_on,notes
+PyMuPDF,PDF text and page extraction,PDF,Commonly reported as dual AGPL / commercial,UNVERIFIED,UNVERIFIED (Catalyst runtime limits not checked),Primary PDF text extractor,2026-10-30,Check licence terms before use in a shared or hosted app
+Trafilatura,Main-text extraction from web pages,HTML / URLs,Not checked,UNVERIFIED,UNVERIFIED,Primary article extractor for URLs,2026-10-30,Check date and metadata extraction on real CSSS pages
+BeautifulSoup,HTML parsing,HTML,Not checked,UNVERIFIED,UNVERIFIED,Fallback parser,2026-10-30,Light dependency
+Playwright,Rendering JavaScript pages,Web pages,Not checked,UNVERIFIED,UNVERIFIED (needs browser binaries),Only for pages that need JavaScript,2026-10-30,education.gov.in/node/255 returned no text to a simple fetch; may need rendering
+Scrapy,Crawling,Web sites,Not checked,UNVERIFIED,UNVERIFIED,Not needed for MVP,2026-10-30,Users supply URLs so crawling is not required
+Apache Tika,Format detection and extraction,Many document types,Not checked,UNVERIFIED,UNVERIFIED (Java service),Probably too heavy for MVP,2026-10-30,
+Tesseract OCR,OCR for scanned pages,Images / scanned PDFs,Not checked,UNVERIFIED,UNVERIFIED (needs native binary),OCR fallback for scanned PDFs,2026-10-30,Native binary may not fit a serverless function
+PaddleOCR,OCR,Images / scanned PDFs,Not checked,UNVERIFIED,UNVERIFIED (heavy ML dependencies),Alternative OCR,2026-10-30,
+Docling,Document layout and table extraction,PDF and others,Not checked,UNVERIFIED,UNVERIFIED (heavy ML dependencies),Option for tables if resources allow,2026-10-30,
+Unstructured,Document partitioning,Many types,Not checked,UNVERIFIED,UNVERIFIED,Optional,2026-10-30,
+Marker,PDF to markdown,PDF,Not checked,UNVERIFIED,UNVERIFIED (heavy ML dependencies),Optional,2026-10-30,

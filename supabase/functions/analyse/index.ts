@@ -232,6 +232,7 @@ interface RequirementRow {
   description: string
   importance: string
   expected_evidence: string | null
+  category?: string | null
 }
 
 interface HeuristicLink {
@@ -242,20 +243,85 @@ interface HeuristicLink {
   excerpt: string
 }
 
-function scoreChunk(chunk: string, requirement: RequirementRow): { score: number; excerpt: string } {
-  const requirementTokens = tokenize(`${requirement.description} ${requirement.expected_evidence ?? ''}`)
+/**
+ * Inverse document frequency over the session's own chunks.
+ *
+ * Without this, a passage containing "student", "scheme" and "scholarship"
+ * scores highly against almost any requirement in this domain, and a shared
+ * vocabulary gets mistaken for evidence. Weighting each term by how rare it is
+ * *within this corpus* makes "percentile", "attendance" and "renewal" count far
+ * more than words every document already uses.
+ */
+function buildIdf(chunks: Array<{ content: string }>): Map<string, number> {
+  const df = new Map<string, number>()
+  for (const chunk of chunks) {
+    for (const token of new Set(tokenize(chunk.content))) {
+      df.set(token, (df.get(token) ?? 0) + 1)
+    }
+  }
+  const total = Math.max(1, chunks.length)
+  const idf = new Map<string, number>()
+  for (const [token, count] of df) idf.set(token, Math.log((total + 1) / (count + 0.5)))
+  return idf
+}
+
+/**
+ * Very small stemmer: compare on a truncated prefix so that "eligibility" meets
+ * "eligible" and "documents" meets "document". It is intentionally crude — it
+ * only ever widens a match within a word family, never across different words.
+ */
+function stem(token: string): string {
+  if (token.length <= 4) return token
+  if (token.endsWith('ies')) return token.slice(0, -3)
+  if (token.endsWith('es') && token.length > 5) return token.slice(0, -2)
+  if (token.endsWith('s')) return token.slice(0, -1)
+  if (token.endsWith('ing') && token.length > 6) return token.slice(0, -3)
+  if (token.endsWith('tion')) return token.slice(0, -3)
+  if (token.endsWith('ity') && token.length > 6) return token.slice(0, -3)
+  if (token.endsWith('ed') && token.length > 5) return token.slice(0, -2)
+  return token.length > 6 ? token.slice(0, -2) : token
+}
+
+function scoreChunk(
+  chunk: string,
+  requirement: RequirementRow,
+  idf?: Map<string, number>,
+): { score: number; matched: number; excerpt: string } {
+  // Score against the requirement itself. Expected-evidence boilerplate is shown
+  // to the reader but deliberately excluded here: it is prose about what would
+  // settle the question, and letting it match would manufacture overlap.
+  const requirementTokens = tokenize(requirement.description)
   const unique = Array.from(new Set(requirementTokens))
   const haystack = chunk.toLowerCase()
+
   let score = 0
+  let matched = 0
   for (const token of unique) {
-    if (haystack.includes(token)) score += token.length > 6 ? 2 : 1
+    if (!haystack.includes(stem(token))) continue
+    // Terms that appear in most chunks carry almost no discriminating power.
+    // Shift the IDF curve so that even a common term carries some weight, while a
+    // term unique to one document still clearly outweighs it.
+    const weight = idf ? 0.5 + Math.max(0, idf.get(token) ?? 0) : token.length > 6 ? 1.4 : 1
+    score += weight
+    matched += 1
   }
-  const matching = sentences(chunk).filter((s) => {
-    const lower = s.toLowerCase()
-    return unique.some((t) => lower.includes(t))
-  })
-  const excerpt = (matching[0] ?? sentences(chunk)[0] ?? chunk.slice(0, 300)).slice(0, 600)
-  return { score, excerpt }
+
+  // Excerpt = the sentence that shares the most distinctive terms, so a quoted
+  // passage is the one that actually carries the match rather than the first
+  // sentence that happens to share a word.
+  const candidates = sentences(chunk)
+  let best = candidates[0] ?? chunk.slice(0, 300)
+  let bestScore = -1
+  for (const sentence of candidates) {
+    const lower = sentence.toLowerCase()
+    let local = 0
+    for (const token of unique) if (lower.includes(stem(token))) local += idf ? 0.5 + Math.max(0, idf.get(token) ?? 0) : 1
+    if (local > bestScore) {
+      bestScore = local
+      best = sentence
+    }
+  }
+  return { score, matched, excerpt: best.slice(0, 600) }
 }
 
 // ---------------------------------------------------------------------------
@@ -500,12 +566,19 @@ async function stageEvidence(ctx: StageContext, batchSize: number): Promise<Reco
 
   const { data: requirementsData, error: requirementError } = await db
     .from('requirements')
-    .select('id,code,description,importance,expected_evidence')
+    .select('id,code,description,importance,expected_evidence,category')
     .eq('session_id', sessionId)
     .order('order_index')
   if (requirementError) throw new Error(requirementError.message)
   const requirements = (requirementsData ?? []) as RequirementRow[]
   if (requirements.length === 0) throw new Error('Generate requirements before mapping evidence.')
+
+  const { data: sessionRow } = await db
+    .from('research_sessions')
+    .select('target_cycle')
+    .eq('id', sessionId)
+    .maybeSingle()
+  const targetCycle = (sessionRow?.target_cycle as string | null) ?? null
 
   const { data: sourcesData } = await db
     .from('sources')
@@ -585,6 +658,7 @@ async function stageEvidence(ctx: StageContext, batchSize: number): Promise<Reco
       requirementByCode,
       engineConfigured,
       notes,
+      targetCycle,
     )
     mappedEvidence += mapped.count
     if (mapped.engine) usedEngine = mapped.engine
@@ -639,6 +713,7 @@ async function mapChunksToRequirements(
   requirementByCode: Map<string, RequirementRow>,
   engineConfigured: boolean,
   notes: string[],
+  targetCycle: string | null = null,
 ): Promise<{ count: number; engine: 'gemini' | 'heuristic' | null }> {
   const { db, sessionId } = ctx
   const sourceId = String(source.id)
@@ -722,62 +797,21 @@ async function mapChunksToRequirements(
   }
 
   // ------------------------------------------------------- heuristic mapping
-  const linked: Array<{
-    chunk: ChunkRow
-    requirement: RequirementRow
-    relation: 'SUPPORTS' | 'PARTIAL'
-    score: number
-    excerpt: string
-  }> = []
+  const drafts = buildHeuristicEvidence(chunks, requirements, requirementByCode)
 
-  for (const requirement of requirements) {
-    const scored = chunks
-      .map((chunk) => {
-        const { score, excerpt } = scoreChunk(chunk.content, requirement)
-        return { chunk, requirement, score, excerpt }
-      })
-      .filter((s) => s.score >= 3)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 2)
-
-    for (const s of scored) {
-      linked.push({
-        chunk: s.chunk,
-        requirement: s.requirement,
-        relation: s.score >= 8 ? 'SUPPORTS' : 'PARTIAL',
-        score: s.score,
-        excerpt: s.excerpt,
-      })
-    }
-  }
-
-  const byChunk = new Map<string, typeof linked>()
-  for (const item of linked) {
-    const list = byChunk.get(item.chunk.id) ?? []
-    list.push(item)
-    byChunk.set(item.chunk.id, list)
-  }
-
-  for (const [, items] of byChunk) {
-    const chunk = items[0].chunk
-    const primary = items.sort((a, b) => b.score - a.score)[0]
-    inserted.push({
-      chunk_id: chunk.id,
-      claim_text: primary.excerpt,
-      summary: null,
-      context_note:
-        'Selected by lexical relevance scoring, not by semantic understanding. Verify that this passage actually addresses the requirement.',
-      page_number: chunk.page_from,
-      quote_verified: true,
-      locator: `chunk ${chunk.chunk_index}`,
-      links: items.slice(0, 5).map((item) => ({
-        requirement_id: item.requirement.id,
-        relation: item.relation,
-        rationale: `Heuristic match: ${item.score} shared significant terms between the requirement and this passage.`,
-        confidence: Math.min(0.55, 0.2 + item.score / 40),
-      })),
-    })
-  }
+  // Dates and academic cycles are examined only when the model is unavailable:
+  // a deterministic rule is better than leaving the judgement unmade, and it is
+  // reported as a labelled heuristic signal rather than as a model conclusion.
+  const linksByChunk = new Map<string, string[]>()
+  for (const draft of drafts) linksByChunk.set(draft.chunk_id, draft.links.map((l) => l.requirement_id))
+  const categoryByRequirement = new Map(requirements.map((r) => [r.id, r.category ?? '']))
+  const signals = examineCycles(
+    chunks.map((c) => ({ id: c.id, content: c.content, page_from: c.page_from, source_id: sourceId })),
+    linksByChunk,
+    categoryByRequirement,
+    targetCycle,
+  )
+  inserted.push(...applyCycleSignals(drafts, signals))
 
   if (inserted.length === 0) return { count: 0, engine: 'heuristic' }
   await persistEvidence(db, sessionId, sourceId, inserted, 'heuristic')
@@ -840,6 +874,316 @@ async function persistEvidence(
       await db.from('evidence_links').insert(rows)
     }
   }
+}
+
+interface HeuristicEvidence {
+  chunk_id: string
+  claim_text: string
+  summary: string | null
+  context_note: string | null
+  page_number: number | null
+  quote_verified: boolean
+  locator: string
+  links: Array<{ requirement_id: string; relation: string; rationale: string; confidence: number }>
+}
+
+/**
+ * Lexical evidence mapping — PURE.
+ *
+ * Deliberately conservative: a passage must share at least three significant
+ * terms with a requirement before it is linked at all, and it only counts as
+ * SUPPORTS when the overlap is strong. Everything weaker is PARTIAL, and the
+ * excerpt keeps a context note saying it was selected by term matching rather
+ * than by understanding, so a reviewer knows what they are looking at.
+ *
+ * Never assigns CONFLICTS or OUTDATED: those require a judgement about dates and
+ * scope that term overlap cannot make, so they are left to the model or to a
+ * human rather than guessed.
+ */
+export function buildHeuristicEvidence(
+  chunks: ChunkRow[],
+  requirements: RequirementRow[],
+  _requirementByCode?: Map<string, RequirementRow>,
+): HeuristicEvidence[] {
+  const idf = buildIdf(chunks)
+  const linked: Array<{
+    chunk: ChunkRow
+    requirement: RequirementRow
+    relation: 'SUPPORTS' | 'PARTIAL'
+    score: number
+    excerpt: string
+  }> = []
+
+  for (const requirement of requirements) {
+    const terms = new Set(tokenize(requirement.description)).size
+    // Precision first. A requirement is "supported" only when a single passage
+    // contains essentially all of its terms (one may be missing for longer
+    // requirements). Partial mention stays PARTIAL — never promoted to found.
+    const neededForSupport = terms >= 4 ? terms - 1 : terms
+    const neededForMatch = Math.max(1, Math.ceil(terms / 2))
+
+    const scored = chunks
+      .map((chunk) => {
+        const { score, matched, excerpt } = scoreChunk(chunk.content, requirement, idf)
+        return { chunk, requirement, score, matched, excerpt }
+      })
+      .filter((s) => s.matched >= neededForMatch && s.score >= 1.5)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+
+    for (const s of scored) {
+      linked.push({
+        chunk: s.chunk,
+        requirement: s.requirement,
+        relation: s.matched >= neededForSupport && s.score >= 3 ? 'SUPPORTS' : 'PARTIAL',
+        score: s.score,
+        excerpt: s.excerpt,
+      })
+    }
+  }
+
+  const byChunk = new Map<string, typeof linked>()
+  for (const item of linked) {
+    const list = byChunk.get(item.chunk.id) ?? []
+    list.push(item)
+    byChunk.set(item.chunk.id, list)
+  }
+
+  const drafts: HeuristicEvidence[] = []
+  for (const [, items] of byChunk) {
+    const chunk = items[0].chunk
+    const primary = items.sort((a, b) => b.score - a.score)[0]
+    drafts.push({
+      chunk_id: chunk.id,
+      claim_text: primary.excerpt,
+      summary: null,
+      context_note:
+        'Selected by weighted term matching over this session\'s documents, not by semantic understanding. Verify that this passage actually addresses the requirement.',
+      page_number: chunk.page_from,
+      quote_verified: true,
+      locator: `chunk ${chunk.chunk_index}`,
+      links: items.slice(0, 5).map((item) => ({
+        requirement_id: item.requirement.id,
+        relation: item.relation,
+        rationale: `Heuristic match: ${item.score.toFixed(1)} weighted term overlap with this requirement.`,
+        confidence: Math.min(0.5, 0.15 + item.score / 40),
+      })),
+    })
+  }
+  return drafts
+}
+
+// ---------------------------------------------------------------------------
+// Date and cycle examination (deterministic, text-only)
+// ---------------------------------------------------------------------------
+
+/** "2026-27", "2026–2027", "AY 2025-26" -> the start year as a number. */
+export function parseCycleStart(token: string): number | null {
+  const m = token.match(/(20\d{2}|19\d{2})\s*[-–—]\s*(\d{2,4})/)
+  if (!m) return null
+  const start = Number(m[1])
+  const rawEnd = m[2]
+  const end = rawEnd.length === 2 ? Math.floor(start / 100) * 100 + Number(rawEnd) : Number(rawEnd)
+  // Reject nonsense such as "2026-1999".
+  if (!Number.isFinite(end) || end < start || end > start + 10) return null
+  return start
+}
+
+export function cyclesIn(text: string): number[] {
+  const found = new Set<number>()
+  for (const m of text.matchAll(/(20\d{2}|19\d{2})\s*[-–—]\s*(\d{2,4})/g)) {
+    const start = parseCycleStart(m[0])
+    if (start !== null) found.add(start)
+  }
+  return [...found].sort((a, b) => a - b)
+}
+
+const MONTHS = 'january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec'
+/** Explicit calendar dates only. Deliberately strict: a vague "November" is not a deadline. */
+const DATE_PATTERNS = [
+  new RegExp(`\\b(\\d{1,2})[./-](\\d{1,2})[./-](20\\d{2})\\b`, 'g'),
+  new RegExp(`\\b(\\d{1,2})\\s+(${MONTHS})[a-z]*\\s+(20\\d{2})\\b`, 'gi'),
+]
+
+export function explicitDates(text: string): string[] {
+  const out = new Set<string>()
+  for (const m of text.matchAll(DATE_PATTERNS[0])) {
+    const [, d, mo, y] = m
+    out.add(`${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+  }
+  for (const m of text.matchAll(DATE_PATTERNS[1])) {
+    const [, d, monthName, y] = m
+    const month = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].findIndex((abbr) =>
+      String(monthName).toLowerCase().startsWith(abbr),
+    )
+    if (month >= 0) out.add(`${y}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+  }
+  return [...out].sort()
+}
+
+export interface CycleSignal {
+  kind: 'outdated' | 'conflict' | 'earlier-cycle'
+  chunk_id: string
+  requirement_id: string
+  /** Present for conflicts only. */
+  other_chunk_id?: string
+  rationale: string
+  date?: string
+}
+
+/**
+ * Examine dates and academic cycles in the material that was actually extracted.
+ *
+ * Rules (deterministic, no guessing):
+ *  1. OUTDATED — a passage that discusses timing or validity, whose latest named
+ *     cycle ends before the target cycle starts, describes an earlier period. A
+ *     passage with no cycle at all is never called outdated: undated is unknown,
+ *     not old.
+ *  2. CONFLICT — two different sources state *different explicit calendar dates*
+ *     for the same requirement. Only real, parsed dates count; a date mentioned
+ *     in one source and absent in another is not a conflict.
+ *
+ * Both rules are conservative by design: they would rather miss a signal than
+ * invent one, because a fabricated conflict is worse than no conflict.
+ */
+export function examineCycles(
+  chunks: Array<{ id: string; content: string; page_from: number | null; source_id: string }>,
+  requirementIdsByChunk: Map<string, string[]>,
+  requirementCategory: Map<string, string>,
+  targetCycle: string | null,
+): CycleSignal[] {
+  const targetStart = targetCycle ? parseCycleStart(targetCycle) : null
+  if (targetStart === null) return []
+
+  const signals: CycleSignal[] = []
+  const datesByRequirement = new Map<string, Map<string, { chunk_id: string; source_id: string; date: string }[]>>()
+
+  for (const chunk of chunks) {
+    const cycles = cyclesIn(chunk.content)
+    const latest = cycles.length ? cycles[cycles.length - 1] : null
+    const requirementIds = requirementIdsByChunk.get(chunk.id) ?? []
+
+    for (const requirementId of requirementIds) {
+      const category = requirementCategory.get(requirementId) ?? ''
+      const timingSensitive = category === 'timing' || category === 'validity'
+      if (latest !== null && latest < targetStart) {
+        signals.push({
+          kind: 'earlier-cycle',
+          chunk_id: chunk.id,
+          requirement_id: requirementId,
+          rationale: `This passage refers to ${cycles.map((c) => `${c}–${String(c + 1).slice(2)}`).join(', ')}, not to the target cycle starting ${targetStart}. It cannot establish the position for the target cycle on its own.`,
+        })
+      }
+
+      if (timingSensitive && latest !== null && latest < targetStart) {
+        signals.push({
+          kind: 'outdated',
+          chunk_id: chunk.id,
+          requirement_id: requirementId,
+          rationale: `This passage refers to ${cycles.map((c) => `${c}–${String(c + 1).slice(2)}`).join(', ')}. The target cycle starts in ${targetStart}, so the passage describes an earlier period and its current validity is unknown.`,
+        })
+      }
+
+      // Conflict evidence is gathered from every linked passage, timing-related or not.
+      for (const date of explicitDates(chunk.content)) {
+        const byDate = datesByRequirement.get(requirementId) ?? new Map()
+        const list = byDate.get(date) ?? []
+        list.push({ chunk_id: chunk.id, source_id: chunk.source_id, date })
+        byDate.set(date, list)
+        datesByRequirement.set(requirementId, byDate)
+      }
+    }
+  }
+
+  // Two different sources naming two different dates for one requirement.
+  for (const [requirementId, byDate] of datesByRequirement) {
+    const dates = [...byDate.keys()]
+    if (dates.length < 2) continue
+    for (let i = 0; i < dates.length; i += 1) {
+      for (let j = i + 1; j < dates.length; j += 1) {
+        const a = byDate.get(dates[i])?.[0]
+        const b = byDate.get(dates[j])?.[0]
+        if (!a || !b || a.source_id === b.source_id) continue
+        signals.push({
+          kind: 'conflict',
+          chunk_id: a.chunk_id,
+          other_chunk_id: b.chunk_id,
+          requirement_id: requirementId,
+          date: dates[i],
+          rationale: `Two reviewed sources state different dates for this requirement (${dates[i]} and ${dates[j]}). Dates, stages or cycles may explain the difference, so this is a possible inconsistency requiring verification.`,
+        })
+        return signals
+      }
+    }
+  }
+
+  return signals
+}
+
+/**
+ * Fold cycle signals into evidence drafts: re-label linked passages as OUTDATED
+ * and, where two sources genuinely disagree on a date, add the second excerpt as
+ * a CONFLICTS link on the same evidence row so the UI can show both sides.
+ */
+export function applyCycleSignals(
+  drafts: HeuristicEvidence[],
+  signals: CycleSignal[],
+): HeuristicEvidence[] {
+  if (signals.length === 0) return drafts
+
+  const outdated = new Set(
+    signals.filter((s) => s.kind === 'outdated').map((s) => `${s.chunk_id}:${s.requirement_id}`),
+  )
+  const earlier = new Map<string, string>()
+  for (const signal of signals) {
+    if (signal.kind === 'earlier-cycle') earlier.set(`${signal.chunk_id}:${signal.requirement_id}`, signal.rationale)
+  }
+  const conflicts = new Map<string, string>()
+  for (const signal of signals) {
+    if (signal.kind === 'conflict') {
+      conflicts.set(`${signal.chunk_id}:${signal.requirement_id}`, signal.rationale)
+    }
+  }
+
+  for (const draft of drafts) {
+    draft.links = draft.links.map((link) => {
+      const outdatedKey = `${draft.chunk_id}:${link.requirement_id}`
+      const conflictRationale = conflicts.get(outdatedKey)
+      if (conflictRationale) {
+        return { ...link, relation: 'CONFLICTS', rationale: conflictRationale, confidence: Math.min(link.confidence, 0.4) }
+      }
+      const earlierRationale = earlier.get(outdatedKey)
+      if (earlierRationale && link.relation === 'SUPPORTS') {
+        return { ...link, relation: 'PARTIAL', rationale: earlierRationale, confidence: Math.min(link.confidence, 0.4) }
+      }
+      if (outdated.has(outdatedKey)) {
+        const signal = signals.find((s) => s.chunk_id === draft.chunk_id && s.requirement_id === link.requirement_id)
+        return {
+          ...link,
+          relation: 'OUTDATED',
+          rationale: signal?.rationale ?? link.rationale,
+          confidence: Math.min(link.confidence, 0.45),
+        }
+      }
+      return link
+    })
+    if (draft.links.some((l) => l.relation === 'OUTDATED')) {
+      draft.context_note =
+        'This passage refers to an earlier cycle than the one being researched. Nothing here establishes the position for the target cycle.'
+    }
+  }
+
+  // De-duplicate: one link per requirement per evidence row.
+  for (const draft of drafts) {
+    const seen = new Set<string>()
+    draft.links = draft.links.filter((l) => {
+      if (seen.has(l.requirement_id)) return false
+      seen.add(l.requirement_id)
+      return true
+    })
+  }
+
+  return drafts
 }
 
 // ---------------------------------------------------------------------------
@@ -980,35 +1324,25 @@ async function stageFindings(ctx: StageContext): Promise<Record<string, unknown>
   }
 }
 
-async function heuristicFindings(
-  db: SupabaseClient,
-  sessionId: string,
+interface DraftFinding {
+  finding: Record<string, unknown>
+  links: Array<{ evidence_id: string; role: string; note?: string | null }>
+}
+
+/**
+ * Heuristic findings — PURE.
+ *
+ * Kept free of a database handle so the exact same rules can be exercised by the
+ * test suite and by the offline demo importer. A finding derived here is always
+ * traceable to the requirement and excerpt that produced it, and a gap quotes
+ * nothing because an absence has no excerpt.
+ */
+export function buildHeuristicFindings(
   requirements: Array<Record<string, unknown>>,
   evidence: Array<Record<string, unknown>>,
   sourceById: Map<string, Record<string, unknown>>,
-): Promise<number> {
-  let created = 0
-
-  const insertFinding = async (
-    finding: Record<string, unknown>,
-    links: Array<{ evidence_id: string; role: string; note?: string | null }> = [],
-  ) => {
-    const { data, error } = await db
-      .from('findings')
-      .insert({ session_id: sessionId, engine: 'heuristic', confidence: finding.confidence ?? 0.4, ...finding })
-      .select('id')
-      .single()
-    if (error || !data) return
-    created += 1
-    for (const link of links) {
-      await db.from('finding_evidence').insert({
-        finding_id: data.id,
-        evidence_id: link.evidence_id,
-        role: link.role,
-        note: link.note ?? null,
-      })
-    }
-  }
+): DraftFinding[] {
+  const drafts: DraftFinding[] = []
 
   for (const requirement of requirements) {
     const status = String(requirement.status)
@@ -1018,14 +1352,17 @@ async function heuristicFindings(
     )
 
     if (status === 'not_found') {
-      await insertFinding({
-        kind: 'gap',
-        title: `Not found in reviewed sources: ${String(requirement.description).slice(0, 180)}`,
-        summary: `None of the excerpts reviewed addresses this requirement. This does not establish that the information is unavailable elsewhere — only that the sources reviewed here do not settle it.`,
-        severity: requirement.importance === 'high' ? 'high' : 'medium',
-        requirement_id: requirementId,
-        recommended_verification:
-          'Consult the authoritative publisher directly (the issuing ministry, department or agency) for the current cycle.',
+      drafts.push({
+        finding: {
+          kind: 'gap',
+          title: `Not found in reviewed sources: ${String(requirement.description).slice(0, 180)}`,
+          summary: `None of the excerpts reviewed addresses this requirement. This does not establish that the information is unavailable elsewhere — only that the sources reviewed here do not settle it.`,
+          severity: requirement.importance === 'high' ? 'high' : 'medium',
+          requirement_id: requirementId,
+          recommended_verification:
+            'Consult the authoritative publisher directly (the issuing ministry, department or agency) for the current cycle.',
+        },
+        links: [],
       })
       continue
     }
@@ -1047,8 +1384,8 @@ async function heuristicFindings(
 
     if (conflicting.length >= 2) {
       const [a, b] = conflicting
-      await insertFinding(
-        {
+      drafts.push({
+        finding: {
           kind: 'conflict',
           title: `Sources appear inconsistent: ${String(requirement.description).slice(0, 150)}`,
           summary: `Two reviewed excerpts make different statements about this requirement. Dates, academic years and application stages may explain the difference; treat this as a possible inconsistency requiring verification rather than proof that either source is wrong.`,
@@ -1057,7 +1394,7 @@ async function heuristicFindings(
           recommended_verification:
             'Compare the publication dates and scope of both sources, then confirm the current position with the issuing authority.',
         },
-        [
+        links: [
           {
             evidence_id: String(a.id),
             role: 'claim_a',
@@ -1069,13 +1406,13 @@ async function heuristicFindings(
             note: `Source: ${String(sourceById.get(String(b.source_id))?.title ?? 'unknown')}`,
           },
         ],
-      )
+      })
     }
 
     if (outdated.length > 0 && status !== 'found') {
       const first = outdated[0]
-      await insertFinding(
-        {
+      drafts.push({
+        finding: {
           kind: 'outdated',
           title: `May describe an earlier period: ${String(requirement.description).slice(0, 150)}`,
           summary: `The reviewed excerpt refers to an earlier cycle or a period that may have lapsed. Its current validity is unknown, so it should not be relied upon for the target cycle without confirmation.`,
@@ -1083,12 +1420,95 @@ async function heuristicFindings(
           requirement_id: requirementId,
           recommended_verification: 'Confirm the current cycle and validity directly with the issuing authority.',
         },
-        [{ evidence_id: String(first.id), role: 'context', note: null }],
-      )
+        links: [{ evidence_id: String(first.id), role: 'context', note: null }],
+      })
     }
   }
 
+  return drafts
+}
+
+async function heuristicFindings(
+  db: SupabaseClient,
+  sessionId: string,
+  requirements: Array<Record<string, unknown>>,
+  evidence: Array<Record<string, unknown>>,
+  sourceById: Map<string, Record<string, unknown>>,
+): Promise<number> {
+  let created = 0
+  for (const draft of buildHeuristicFindings(requirements, evidence, sourceById)) {
+    const { data, error } = await db
+      .from('findings')
+      .insert({
+        session_id: sessionId,
+        engine: 'heuristic',
+        confidence: (draft.finding.confidence as number | undefined) ?? 0.4,
+        ...draft.finding,
+      })
+      .select('id')
+      .single()
+    if (error || !data) continue
+    created += 1
+    for (const link of draft.links) {
+      await db.from('finding_evidence').insert({
+        finding_id: data.id,
+        evidence_id: link.evidence_id,
+        role: link.role,
+        note: link.note ?? null,
+      })
+    }
+  }
   return created
+}
+
+/**
+ * Rule-based verification checklist — PURE.
+ *
+ * One actionable item per finding, prioritised by the finding's severity. Gap
+ * findings are phrased as a direct confirmation step rather than restating the
+ * gap, so the checklist reads as work to do rather than as a conclusion.
+ */
+export function buildHeuristicChecklist(
+  findings: Array<Record<string, unknown>>,
+  requirementsNeedingVerification: Array<Record<string, unknown>> = [],
+): Array<Record<string, unknown>> {
+  const items: Array<Record<string, unknown>> = findings.slice(0, 14).map((f, index) => ({
+    title:
+      f.kind === 'gap'
+        ? `Confirm directly: ${String(f.title).replace(/^Not found in reviewed sources:\s*/i, '').slice(0, 200)}`
+        : String(f.title).slice(0, 240),
+    why_it_matters: String(f.summary).slice(0, 600),
+    requirement_id: f.requirement_id ? String(f.requirement_id) : null,
+    finding_id: String(f.id),
+    recommended_source:
+      (f.recommended_verification as string | null) ??
+      'The authoritative publisher for this scheme or rule.',
+    priority: f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'medium' : 'low',
+    order_index: index,
+    engine: 'heuristic',
+  }))
+
+  // Requirements that are only partly supported, conflicting or outdated still
+  // need a human to look, even when no finding was raised for them.
+  const covered = new Set(items.map((i) => i.requirement_id).filter(Boolean))
+  for (const requirement of requirementsNeedingVerification) {
+    const requirementId = String(requirement.requirement_id ?? requirement.id ?? '')
+    if (!requirementId || covered.has(requirementId)) continue
+    const status = String(requirement.status ?? '')
+    if (!['partial', 'conflicting', 'outdated'].includes(status)) continue
+    items.push({
+      title: `Verify with the authority: ${String(requirement.description ?? '').slice(0, 180)}`,
+      why_it_matters: `The reviewed material only ${status === 'partial' ? 'partly supports' : status === 'conflicting' ? 'disagrees on' : 'describes an earlier period for'} this requirement, so it cannot be relied on without confirmation.`,
+      requirement_id: requirementId,
+      finding_id: null,
+      recommended_source: 'The issuing ministry, department or agency for the current cycle.',
+      priority: requirement.importance === 'high' ? 'high' : 'medium',
+      order_index: items.length,
+      engine: 'heuristic',
+    })
+  }
+
+  return items.slice(0, 16)
 }
 
 // ---------------------------------------------------------------------------
@@ -1159,26 +1579,7 @@ async function stageChecklist(ctx: StageContext): Promise<Record<string, unknown
   }
 
   if (created === 0) {
-    const inserts: Array<Record<string, unknown>> = []
-    findings.slice(0, 14).forEach((f, index) => {
-      inserts.push({
-        session_id: sessionId,
-        title:
-          f.kind === 'gap'
-            ? `Confirm directly: ${String(f.title).replace(/^Not found in reviewed sources:\s*/i, '').slice(0, 200)}`
-            : String(f.title).slice(0, 240),
-        why_it_matters: String(f.summary).slice(0, 600),
-        requirement_id: f.requirement_id ? String(f.requirement_id) : null,
-        finding_id: String(f.id),
-        recommended_source:
-          (f.recommended_verification as string | null) ??
-          'The authoritative publisher for this scheme or rule.',
-        priority: f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'medium' : 'low',
-        order_index: index,
-        engine: 'heuristic',
-      })
-    })
-
+    const inserts = buildHeuristicChecklist(findings, requirements ?? []).map((item) => ({ session_id: sessionId, ...item }))
     if (inserts.length > 0) {
       const { error } = await db.from('checklist_items').insert(inserts)
       if (!error) created = inserts.length

@@ -1,0 +1,13 @@
+item_id,priority,question,why_it_matters,where_to_check,related_requirement,status
+V01,High,What are the official 2026-27 student / institute / state verification deadlines for CSSS?,Secondary sites disagree (30 Sep / 25 Oct / 31 Oct),Scheme card inside your NSP login at scholarships.gov.in,R09,OPEN
+V02,High,Is the scheme officially continued for 2026-27 after March 2026?,Only a mirror letter mentions approval up to March 2026,education.gov.in and PIB notices; NSP announcements,R13,OPEN
+V03,High,Where is the official 2025-26 or 2026-27 FAQ PDF and is it on scholarships.gov.in?,Official FAQ URL was not confirmed,https://www.education.gov.in/node/255 and NSP scheme page,R07,OPEN
+V04,High,What is the full required-document list for fresh and renewal applications?,Guidelines name only the income certificate,NSP application form and instructions,R07,OPEN
+V05,Medium,What is the date and page count of the guidelines PDF?,File name suggests 06-02-2024 but this is only an inference,Open the PDF and record metadata,R13,OPEN
+V06,Medium,Did the fresh-application window open for 2026-27 and when?,Secondary sites claim 1 June 2026,NSP home page notices,R09,OPEN
+V07,Medium,Is there an official host for the 2018 and 2019 guidelines?,Older versions were found only on state and college mirrors,education.gov.in archives,R05,OPEN
+V08,Medium,What are the state-board percentile cut-offs for your board?,Eligibility depends on the board list,NSP percentile list for your board,R01,OPEN
+V09,Medium,Does the FAQ confirm the B.Tech year-4 rate of Rs 20000?,Guidelines state it; FAQ not read,Official FAQ PDF,R05,OPEN
+V10,Low,Does your college appear with a valid AISHE code?,Needed for institution eligibility,https://aishe.gov.in/aishe/aisheCode,R11,OPEN
+V11,Medium,What are the licences of FEVER VitaminC SciFact HOVER KILT?,Needed before storing or redistributing data,Official dataset pages,Licence register,OPEN
+V12,Medium,What are Catalyst function runtime and time limits?,Docs fetch failed so these are unverified,Official Catalyst docs,Architecture,OPEN
