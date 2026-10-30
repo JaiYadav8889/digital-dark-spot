@@ -19,18 +19,19 @@ import {
   addUrlSource,
   extractSource,
   markSourceFailed,
+  documentUrlFor,
   removeSource,
-  signedDocumentUrl,
   uploadPdfSource,
   validatePdf,
   validateUrl,
 } from '../../lib/api'
-import { SOURCE_STATUS_META, SOURCE_TYPE_LABEL } from '../../lib/status'
+import { SOURCE_STATUS_META, SOURCE_TYPE_LABEL, sourceOrigin } from '../../lib/status'
 import type { Source, SourceType } from '../../lib/types'
 import { cn, formatBytes, formatDate, relativeTime } from '../../lib/utils'
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Select, Textarea } from '../ui/primitives'
 import { Modal, Tooltip } from '../ui/overlay'
 import { useToast } from '../ui/toast'
+import { OriginBadge } from './ProvenanceBadge'
 
 const SOURCE_TYPES: SourceType[] = [
   'official_guideline',
@@ -86,10 +87,9 @@ export function SourcesPanel({
   }
 
   async function openPdf(source: Source) {
-    if (!source.storage_path) return
-    const url = await signedDocumentUrl(source.storage_path)
+    const url = await documentUrlFor(source)
     if (url) window.open(url, '_blank', 'noopener,noreferrer')
-    else toast.error('Could not create a link to this document')
+    else toast.error('No readable copy of this document is available here')
   }
 
   const failedCount = sources.filter((s) => s.status === 'failed').length
@@ -160,6 +160,7 @@ export function SourcesPanel({
                       <Badge tone={statusMeta.tone} dot>
                         {processing ? 'Processing' : statusMeta.label}
                       </Badge>
+                      <OriginBadge category={sourceOrigin(source)} />
                     </div>
 
                     <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10.5px] text-slatey-400">
@@ -187,12 +188,13 @@ export function SourcesPanel({
                     ) : null}
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
-                      {source.kind === 'pdf' && source.storage_path ? (
+                      {source.kind === 'pdf' && (source.document_path || source.storage_path) ? (
                         <button
                           onClick={() => void openPdf(source)}
                           className="flex items-center gap-1 text-[10.5px] font-medium text-ice hover:text-white"
                         >
-                          <ExternalLink className="h-3 w-3" /> Original PDF
+                          <ExternalLink className="h-3 w-3" />{' '}
+                          {source.document_path ? 'Uploaded PDF' : 'Original PDF'}
                         </button>
                       ) : source.url ? (
                         <a

@@ -321,8 +321,12 @@ const main = async () => {
       e.provenance,
       `Original filename: ${e.original_name}.`,
       `Content hash (sha256): ${source.sha}.`,
+      e.date_source ? `Date basis: ${e.date_source}` : '',
+      e.quality_note ? `Text quality: ${e.quality_note}` : '',
       e.url_note,
-    ].join(' ')
+    ]
+      .filter(Boolean)
+      .join(' ')
     return `  (${[
       q(id(11, index + 1)),
       q(SESSION_ID),

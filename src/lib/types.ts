@@ -57,6 +57,12 @@ export interface Source {
   issuer: string | null
   source_type: SourceType
   storage_path: string | null
+  /**
+   * App-relative path to an uploaded copy of the document, used to open the
+   * exact PDF page behind an excerpt. Distinct from `url` (where the document
+   * was published) and from `storage_path` (a runtime upload).
+   */
+  document_path: string | null
   file_name: string | null
   file_size: number | null
   mime_type: string | null
@@ -240,6 +246,7 @@ export interface EvidenceWithSource extends EvidenceItem {
     | 'updated_date'
     | 'page_count'
     | 'storage_path'
+    | 'document_path'
     | 'file_name'
     | 'status'
   >

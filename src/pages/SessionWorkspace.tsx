@@ -34,6 +34,7 @@ import { useSessionData } from '../hooks/useSessionData'
 import { setFindingStatus, toggleChecklistItem } from '../lib/api'
 import { computeStats } from '../lib/stats'
 import { DEMO_DISCLAIMER, DEMO_ENGINE_NOTE, DISCLAIMERS, RELATION_META, STATUS_META } from '../lib/status'
+import { ProvenanceLegend } from '../components/session/ProvenanceBadge'
 import type { EvidenceWithSource, FindingKind, Relation } from '../lib/types'
 import { cn, formatDate, relativeTime } from '../lib/utils'
 
@@ -341,6 +342,9 @@ export default function SessionWorkspace() {
           </div>
         </section>
       ) : null}
+
+      {/* --------------------------------------------------- provenance key */}
+      <ProvenanceLegend className="rounded-xl border border-white/[0.06] bg-white/[0.015] p-2.5" />
 
       {/* ------------------------------------------------------------- content */}
       {tab === 'overview' && (

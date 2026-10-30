@@ -11,12 +11,13 @@ import {
   Quote,
   Link2Off,
 } from 'lucide-react'
-import { signedDocumentUrl } from '../../lib/api'
-import { RELATION_META, SOURCE_TYPE_LABEL, TONE_CLASS } from '../../lib/status'
+import { documentUrlFor } from '../../lib/api'
+import { RELATION_META, SOURCE_TYPE_LABEL, TONE_CLASS, sourceOrigin } from '../../lib/status'
 import type { EvidenceWithSource, Relation } from '../../lib/types'
 import { cn, formatDate, truncate } from '../../lib/utils'
 import { Badge } from '../ui/primitives'
 import { Tooltip } from '../ui/overlay'
+import { OriginBadge } from './ProvenanceBadge'
 
 export function EvidenceCard({
   evidence,
@@ -38,19 +39,24 @@ export function EvidenceCard({
   const [openError, setOpenError] = useState<string | null>(null)
 
   const src = evidence.source
-  const isPdf = src.kind === 'pdf' && Boolean(src.storage_path)
+  const origin = sourceOrigin(src)
+  const canOpenDocument = Boolean(src.document_path || src.storage_path)
 
   async function openDocument() {
-    if (!src.storage_path) return
     setOpening(true)
     setOpenError(null)
-    const url = await signedDocumentUrl(src.storage_path)
+    const url = await documentUrlFor(src)
     setOpening(false)
     if (!url) {
-      setOpenError('A signed link could not be created for this document.')
+      setOpenError('No readable copy of this document is available here.')
       return
     }
-    const target = evidence.page_number ? `${url}#page=${evidence.page_number}` : url
+    // A page anchor only makes sense for a PDF; the page number comes from the
+    // chunk this excerpt was taken from, never from the reader's guess.
+    const target =
+      evidence.page_number && url.toLowerCase().endsWith('.pdf')
+        ? `${url}#page=${evidence.page_number}`
+        : url
     window.open(target, '_blank', 'noopener,noreferrer')
   }
 
@@ -79,6 +85,7 @@ export function EvidenceCard({
           {role && roleLabel[role] ? (
             <Badge tone="ice">{roleLabel[role]}</Badge>
           ) : null}
+          <OriginBadge category={origin} />
           <span className="flex min-w-0 items-center gap-1 text-[10.5px] text-slatey-400">
             {src.kind === 'pdf' ? <FileText className="h-3 w-3 shrink-0" /> : <Globe className="h-3 w-3 shrink-0" />}
             <span className="truncate">{src.issuer ?? src.domain ?? SOURCE_TYPE_LABEL[src.source_type]}</span>
@@ -189,7 +196,7 @@ export function EvidenceCard({
             </Tooltip>
           )}
 
-          {isPdf ? (
+          {canOpenDocument ? (
             <button
               onClick={openDocument}
               className="flex items-center gap-1 text-[10.5px] font-medium text-ice transition-colors hover:text-white"

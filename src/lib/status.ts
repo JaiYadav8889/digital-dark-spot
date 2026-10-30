@@ -9,11 +9,13 @@
  */
 
 import type {
+  Finding,
   FindingKind,
   Importance,
   Relation,
   RequirementStatus,
   RequirementWithStatus,
+  Source,
   SourceStatus,
   SourceType,
 } from './types'
@@ -332,6 +334,73 @@ export function deriveStatus(input: {
 }
 
 // ---------------------------------------------------------------------------
+// 5b. Provenance — the four categories the product must never blur
+// ---------------------------------------------------------------------------
+//
+//  1 UPLOADED  a document the researcher supplied; its text was extracted here
+//              but nothing was fetched from the live web to check it
+//  2 LIVE      a page or file fetched from its own URL during this session
+//  3 AI        a model-generated suggestion, never a conclusion
+//  4 VERIFY    something a person has to confirm with the issuer
+//
+// The distinction is shown on every source, every excerpt and every finding, so
+// no uploaded document can be read as "currently live-verified".
+
+export type OriginCategory = 1 | 2 | 3 | 4
+
+export const ORIGIN_META: Record<
+  OriginCategory,
+  { label: string; short: string; tone: Tone; description: string }
+> = {
+  1: {
+    label: 'Uploaded demonstration source',
+    short: 'Uploaded',
+    tone: 'violet',
+    description:
+      'Supplied as a document by the researcher. Its text was extracted in this app, but it was not fetched from, or checked against, the live web here — so it is not live-verified.',
+  },
+  2: {
+    label: 'Live retrieved source',
+    short: 'Live',
+    tone: 'ice',
+    description:
+      'Fetched from its own URL during this session. Its retrieval time is recorded above; it may still have changed since that moment.',
+  },
+  3: {
+    label: 'AI-generated potential finding',
+    short: 'AI lead',
+    tone: 'amber',
+    description:
+      'Produced by a language model. Treat it as a lead to check, never as an established fact.',
+  },
+  4: {
+    label: 'Requires independent verification',
+    short: 'Verify',
+    tone: 'slate',
+    description:
+      'Derived by rule from the reviewed text, or explicitly flagged for a human. Confirm it with the issuing authority before relying on it.',
+  },
+}
+
+/**
+ * A source is only "live retrieved" if it came from the network. Anything the
+ * researcher supplied — an uploaded PDF, a runtime upload, or a typed note —
+ * stays category 1 no matter how official it looks.
+ */
+export function sourceOrigin(
+  source: Pick<Source, 'kind' | 'file_name' | 'document_path' | 'storage_path'>,
+): 1 | 2 {
+  if (source.kind === 'note') return 1
+  if (source.document_path || source.storage_path || source.file_name) return 1
+  return 2
+}
+
+/** Only a model-produced finding is labelled AI; rule-based signals are not. */
+export function findingOrigin(finding: Pick<Finding, 'engine'>): 3 | 4 {
+  return finding.engine === 'gemini' ? 3 : 4
+}
+
+// ---------------------------------------------------------------------------
 // 6. Standing disclaimers — reused wherever a finding is displayed
 // ---------------------------------------------------------------------------
 
@@ -356,7 +425,7 @@ export const DISCLAIMERS = {
  * this exact sentence is displayed wherever the dataset is opened.
  */
 export const DEMO_DISCLAIMER =
-  'Demonstration dataset based on the Phase 1 research inventory — verify against the current official NSP portal before making application decisions.'
+  'Demonstration dataset built from the two documents supplied in the Phase 1 pack. Requirement titles come from the research inventory; every status, excerpt, finding and checklist item was produced by this app from the extracted text. Verify against the current official NSP portal before making application decisions.'
 
 export const DEMO_ENGINE_NOTE =
-  'Curated demonstration data, not a live AI run and not live source extraction.'
+  'The text was extracted here with PyMuPDF and analysed with the rule-based engine — no language model was called, and neither document was re-fetched from a live URL.'

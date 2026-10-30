@@ -14,23 +14,27 @@
       "title": "Central Sector Scheme of Scholarship for College and University Students — Scheme Guidelines (MHRD / Department of Higher Education)",
       "issuer": "Ministry of Human Resource Development, Department of Higher Education (Scholarship Bureau)",
       "source_type": "official_guideline",
-      "published_date": "2018-08-01",
+      "published_date": "2018-08-03",
       "url": "https://scholarships.gov.in/public/schemeGuidelines/CSSS_GUIDLINES_06022024.pdf",
       "url_note": "URL recorded in the Phase 1 research inventory for the CSSS guidelines PDF. It was NOT re-fetched during this import; the text below comes from the uploaded file.",
       "provenance": "Uploaded demonstration document (Phase 1 inventory pack)",
-      "document_path": "/demo-sources/csss-guidelines-mhrd.pdf"
+      "document_path": "/demo-sources/csss-guidelines-mhrd.pdf",
+      "date_source": "PDF creation-date metadata (Adobe Paper Capture, 3 Aug 2018). The document itself is dated AUGUST, 2018.",
+      "quality_note": "The text layer is OCR output from a scanned paper capture: figures and words are mis-read in places (“80111 percentile” for 80th percentile, “Income Cenificate”, “Rs.I0000”). Numbers quoted from this file should be read against the page image before use."
     },
     {
       "file": "public/demo-sources/csss-faq-dohe.pdf",
       "original_name": "FAQ_DOHE_CSSS.pdf",
       "title": "PM-USP Central Sector Scheme of Scholarships — Frequently Asked Questions (DOHE, 2025-26)",
       "issuer": "Department of Higher Education (Scholarship Division), Ministry of Education",
-      "source_type": "government_page",
+      "source_type": "pdf_document",
       "published_date": "2025-06-18",
       "url": null,
       "url_note": "No original URL is recorded in the Phase 1 inventory for this FAQ (the inventory lists the official FAQ URL as unconfirmed). None is invented here; the document is opened from the uploaded copy.",
       "provenance": "Uploaded demonstration document (Phase 1 inventory pack)",
-      "document_path": "/demo-sources/csss-faq-dohe.pdf"
+      "document_path": "/demo-sources/csss-faq-dohe.pdf",
+      "date_source": "PDF creation-date metadata (Word export, 18 Jun 2025). No publication date is printed on the document itself.",
+      "quality_note": "Digital text, no OCR noise. The FAQ answers are written for AY 2025-26 and carry no explicit calendar deadline, so it cannot settle a 2026-27 date."
     }
   ]
 }

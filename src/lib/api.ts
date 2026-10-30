@@ -320,6 +320,20 @@ export async function signedDocumentUrl(storagePath: string): Promise<string | n
   return data?.signedUrl ?? null
 }
 
+/**
+ * Where the reader can actually open a document: the uploaded copy that ships
+ * with the app when there is one, otherwise a short-lived link to the object in
+ * Storage. Returns null when neither exists, so callers can say so honestly.
+ */
+export async function documentUrlFor(source: {
+  storage_path: string | null
+  document_path: string | null
+}): Promise<string | null> {
+  if (source.document_path) return source.document_path
+  if (source.storage_path) return signedDocumentUrl(source.storage_path)
+  return null
+}
+
 // ---------------------------------------------------------------------------
 // Analysis pipeline (Edge Functions)
 // ---------------------------------------------------------------------------
@@ -491,6 +505,7 @@ export async function listEvidenceWithSource(sessionId: string): Promise<Evidenc
         updated_date: src?.updated_date ?? null,
         page_count: src?.page_count ?? null,
         storage_path: src?.storage_path ?? null,
+        document_path: src?.document_path ?? null,
         file_name: src?.file_name ?? null,
         status: src?.status ?? 'failed',
       },
@@ -583,6 +598,7 @@ export async function listAllEvidence(): Promise<EvidenceLibraryRow[]> {
         updated_date: src?.updated_date ?? null,
         page_count: src?.page_count ?? null,
         storage_path: src?.storage_path ?? null,
+        document_path: src?.document_path ?? null,
         file_name: src?.file_name ?? null,
         status: src?.status ?? 'failed',
       },

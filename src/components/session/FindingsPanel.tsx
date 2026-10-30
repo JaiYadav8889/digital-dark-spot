@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
-import { DISCLAIMERS, FINDING_META, TONE_CLASS } from '../../lib/status'
+import { DISCLAIMERS, FINDING_META, TONE_CLASS, findingOrigin } from '../../lib/status'
 import type {
   EvidenceWithSource,
   Finding,
@@ -22,6 +22,7 @@ import type {
 import { cn, formatDate, truncate } from '../../lib/utils'
 import { Badge, Button, EmptyState } from '../ui/primitives'
 import { EvidenceCard } from './EvidenceCard'
+import { OriginBadge } from './ProvenanceBadge'
 
 const ICONS = {
   gap: CircleDashed,
@@ -211,9 +212,12 @@ function FindingCard({
             </button>
           ) : null}
         </div>
-        <Badge tone={finding.severity === 'high' ? 'coral' : finding.severity === 'medium' ? 'amber' : 'slate'}>
-          {finding.severity === 'high' ? 'Act soon' : finding.severity === 'medium' ? 'Medium' : 'Low'}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <OriginBadge category={findingOrigin(finding)} showLabel={false} />
+          <Badge tone={finding.severity === 'high' ? 'coral' : finding.severity === 'medium' ? 'amber' : 'slate'}>
+            {finding.severity === 'high' ? 'Act soon' : finding.severity === 'medium' ? 'Medium' : 'Low'}
+          </Badge>
+        </div>
       </div>
 
       <div className="px-4 pb-3 pt-2">
