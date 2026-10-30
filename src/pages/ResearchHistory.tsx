@@ -125,7 +125,7 @@ export default function ResearchHistory() {
             <Fragment key={s.session_id}>
             {s.is_demo && (index === 0 || !rows[index - 1].is_demo) ? (
               <li className="list-none px-1 pb-1 pt-3 text-[10.5px] uppercase tracking-[0.14em] text-slatey-400">
-                Demonstration {rows.filter((r) => r.is_demo).length === 1 ? 'case' : 'cases'} · curated
+                Demonstration {rows.filter((r) => r.is_demo).length === 1 ? 'case' : 'cases'} · built from the uploaded documents
                 data, not live extraction
               </li>
             ) : null}

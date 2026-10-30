@@ -420,9 +420,10 @@ export const DISCLAIMERS = {
 } as const
 
 /**
- * The demonstration dataset is a curated reading of the Phase 1 research
- * inventory. It is never presented as live extraction or live verification, and
- * this exact sentence is displayed wherever the dataset is opened.
+ * The demonstration dataset was produced from the two PDFs supplied in the Phase
+ * 1 pack by this project's own extraction and analysis code. It is never
+ * presented as live retrieval or live verification, and this exact sentence is
+ * displayed wherever the dataset is opened.
  */
 export const DEMO_DISCLAIMER =
   'Demonstration dataset built from the two documents supplied in the Phase 1 pack. Requirement titles come from the research inventory; every status, excerpt, finding and checklist item was produced by this app from the extracted text. Verify against the current official NSP portal before making application decisions.'

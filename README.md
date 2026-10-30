@@ -70,7 +70,8 @@ api/extract.py          Python extraction service (Vercel serverless, also runna
 scripts/                Local runner + executable tests for extraction and analysis
 supabase/migrations/    Schema, RLS policies and views (reference copy)
 supabase/functions/     Edge Functions: analyse, extract-source, system-status
-supabase/seed/          Curated demonstration dataset (CSSS AY 2026–27)
+supabase/seed/          Generated demonstration dataset (CSSS AY 2026–27)
+demo/                   Source manifest, uploads and the generator's build summary
 docs/                   Architecture, setup, data model, integration audit
 vercel.json             Vite build + Python function config + SPA rewrites
 ```
